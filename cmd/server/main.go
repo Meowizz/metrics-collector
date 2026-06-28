@@ -3,8 +3,8 @@ package main
 import (
 	"net/http"
 
-	"github.com/Meowizz/metrics-collector.git/internal/handler"
-	"github.com/Meowizz/metrics-collector.git/internal/repository"
+	"github.com/Meowizz/metrics-collector/internal/handler"
+	"github.com/Meowizz/metrics-collector/internal/repository"
 )
 
 func main() {

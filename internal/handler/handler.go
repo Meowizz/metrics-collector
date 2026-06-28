@@ -1,11 +1,12 @@
 package handler
 
 import (
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
 
-	"github.com/Meowizz/metrics-collector.git/internal/repository"
+	"github.com/Meowizz/metrics-collector/internal/repository"
 )
 
 type MetricsHandler struct {
@@ -17,6 +18,7 @@ func NewMetricsHandler(storage repository.Storage) *MetricsHandler {
 }
 
 func (m *MetricsHandler) UpdatePage(res http.ResponseWriter, req *http.Request) {
+	log.Printf("Получен запрос: %s %s", req.Method, req.URL.Path)
 	if req.Method != http.MethodPost {
 		http.Error(res, "", http.StatusMethodNotAllowed)
 		return

@@ -63,7 +63,7 @@ func (c *Collector) Collect() {
 	c.metrics["TotalAlloc"] = &Metric{Type: Gauge, Name: "TotalAlloc", Value: float64(memStats.TotalAlloc)}
 	c.metrics["RandomValue"] = &Metric{
 		Type:  Gauge,
-		Name:  "Random Value",
+		Name:  "RandomValue",
 		Value: rand.Float64(),
 	}
 	if existing, exists := c.metrics["PollCount"]; exists {
