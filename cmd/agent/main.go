@@ -13,6 +13,8 @@ func main() {
 	c := collector.NewCollector()
 	s := sender.NewSender("http://localhost:8080")
 
+	c.Collect()
+
 	go func() {
 		for {
 			c.Collect()
