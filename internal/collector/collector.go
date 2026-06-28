@@ -1,7 +1,9 @@
 package collector
 
 import (
+	"math/rand"
 	"runtime"
+	"time"
 )
 
 type metricType string
@@ -22,6 +24,7 @@ type Collector struct {
 }
 
 func NewCollector() *Collector {
+	rand.Seed(time.Now().UnixNano())
 	return &Collector{
 		metrics: make(map[string]*Metric),
 	}
@@ -58,7 +61,11 @@ func (c *Collector) Collect() {
 	c.metrics["StackSys"] = &Metric{Type: Gauge, Name: "StackSys", Value: float64(memStats.StackSys)}
 	c.metrics["Sys"] = &Metric{Type: Gauge, Name: "Sys", Value: float64(memStats.Sys)}
 	c.metrics["TotalAlloc"] = &Metric{Type: Gauge, Name: "TotalAlloc", Value: float64(memStats.TotalAlloc)}
-
+	c.metrics["RandomValue"] = &Metric{
+		Type:  Gauge,
+		Name:  "Random Value",
+		Value: rand.Float64(),
+	}
 	if existing, exists := c.metrics["PollCount"]; exists {
 		currentValue := existing.Value.(int64)
 		existing.Value = currentValue + 1
