@@ -25,11 +25,6 @@ func (m *MetricsHandler) UpdatePage(res http.ResponseWriter, req *http.Request) 
 		return
 	}
 
-	if req.Header.Get("Content-Type") != "text/plain" {
-		http.Error(res, "Content-Type must be text/plain", http.StatusBadRequest)
-		return
-	}
-
 	metricType := chi.URLParam(req, "type")
 	metricName := chi.URLParam(req, "name")
 	valueStr := chi.URLParam(req, "value")
