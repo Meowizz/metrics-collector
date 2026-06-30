@@ -5,7 +5,6 @@ import (
 	"log"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/Meowizz/metrics-collector/internal/repository"
 	"github.com/go-chi/chi/v5"
@@ -31,20 +30,9 @@ func (m *MetricsHandler) UpdatePage(res http.ResponseWriter, req *http.Request) 
 		return
 	}
 
-	path := strings.Split(req.URL.Path, "/")
-
-	if len(path) != 5 {
-		http.Error(res, "Invalid path", http.StatusNotFound)
-		return
-	}
-	if path[3] == "" {
-		http.Error(res, "metric name is required", http.StatusNotFound)
-		return
-	}
-
-	metricType := path[2]
-	metricName := path[3]
-	valueStr := path[4]
+	metricType := chi.URLParam(req, "type")
+	metricName := chi.URLParam(req, "name")
+	valueStr := chi.URLParam(req, "value")
 
 	switch metricType {
 	case "gauge":
@@ -107,4 +95,5 @@ func (m *MetricsHandler) GetMetricValue(rw http.ResponseWriter, req *http.Reques
 
 func (m *MetricsHandler) RegisterRouters(r chi.Router) {
 	r.Get("/value/{type}/{name}", m.GetMetricValue)
+	r.Post("/update/{type}/{name}/{value}", m.UpdatePage)
 }

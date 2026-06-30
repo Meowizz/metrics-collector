@@ -18,8 +18,7 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	r.Post("/update", handler.UpdatePage)
-	r.Post("/update/", handler.UpdatePage)
+	r.Post("/update/{type}/{name}/{value}", handler.UpdatePage)
 	r.Get("/value/{type}/{name}", handler.GetMetricValue)
 
 	err := http.ListenAndServe(":8080", r)
