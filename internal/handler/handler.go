@@ -1,12 +1,13 @@
 package handler
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/Meowizz/metrics-collector/internal/repository"
+	"github.com/go-chi/chi/v5"
 )
 
 type MetricsHandler struct {
@@ -24,25 +25,9 @@ func (m *MetricsHandler) UpdatePage(res http.ResponseWriter, req *http.Request) 
 		return
 	}
 
-	if req.Header.Get("Content-Type") != "text/plain" {
-		http.Error(res, "Content-Type must be text/plain", http.StatusBadRequest)
-		return
-	}
-
-	path := strings.Split(req.URL.Path, "/")
-
-	if len(path) != 5 {
-		http.Error(res, "Invalid path", http.StatusNotFound)
-		return
-	}
-	if path[3] == "" {
-		http.Error(res, "metric name is required", http.StatusNotFound)
-		return
-	}
-
-	metricType := path[2]
-	metricName := path[3]
-	valueStr := path[4]
+	metricType := chi.URLParam(req, "type")
+	metricName := chi.URLParam(req, "name")
+	valueStr := chi.URLParam(req, "value")
 
 	switch metricType {
 	case "gauge":
@@ -68,4 +53,42 @@ func (m *MetricsHandler) UpdatePage(res http.ResponseWriter, req *http.Request) 
 		return
 	}
 	res.WriteHeader(http.StatusOK)
+}
+
+func (m *MetricsHandler) GetMetricValue(rw http.ResponseWriter, req *http.Request) {
+	metricType := chi.URLParam(req, "type")
+	metricName := chi.URLParam(req, "name")
+
+	rw.Header().Set("Content-Type", "text/plain;charset=utf-8")
+
+	switch metricType {
+	case "gauge":
+		val, ok := m.storage.GetGauge(metricName)
+
+		if !ok {
+			http.Error(rw, "Metric not found", http.StatusNotFound)
+			return
+		}
+
+		rw.WriteHeader(http.StatusOK)
+		fmt.Fprint(rw, val)
+
+	case "counter":
+		val, ok := m.storage.GetCounter(metricName)
+
+		if !ok {
+			http.Error(rw, "Metric not found", http.StatusNotFound)
+			return
+		}
+
+		rw.WriteHeader(http.StatusOK)
+		fmt.Fprint(rw, val)
+	default:
+		http.Error(rw, "Unknown metric type", http.StatusBadRequest)
+	}
+}
+
+func (m *MetricsHandler) RegisterRouters(r chi.Router) {
+	r.Get("/value/{type}/{name}", m.GetMetricValue)
+	r.Post("/update/{type}/{name}/{value}", m.UpdatePage)
 }
