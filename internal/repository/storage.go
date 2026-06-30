@@ -8,6 +8,8 @@ type MemStorage struct {
 type Storage interface {
 	UpdateGauge(name string, value float64) error
 	UpdateCounter(name string, value int64) error
+	GetGauge(name string) (float64, bool)
+	GetCounter(name string) (int64, bool)
 }
 
 func NewMemStorage() *MemStorage {
@@ -25,4 +27,14 @@ func (m *MemStorage) UpdateGauge(name string, value float64) error {
 func (m *MemStorage) UpdateCounter(name string, value int64) error {
 	m.counter[name] += value
 	return nil
+}
+
+func (m *MemStorage) GetGauge(name string) (float64, bool) {
+	value, exist := m.gauge[name]
+	return value, exist
+}
+
+func (m *MemStorage) GetCounter(name string) (int64, bool) {
+	value, exist := m.counter[name]
+	return value, exist
 }
