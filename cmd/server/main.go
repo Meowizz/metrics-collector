@@ -12,6 +12,8 @@ import (
 func main() {
 	storage := repository.NewMemStorage()
 	handler := handler.NewMetricsHandler(storage)
+	cfg := ParseFlag()
+	addrString := cfg.Addr.String()
 
 	r := chi.NewRouter()
 
@@ -21,7 +23,7 @@ func main() {
 	r.Post("/update/{type}/{name}/{value}", handler.UpdatePage)
 	r.Get("/value/{type}/{name}", handler.GetMetricValue)
 
-	err := http.ListenAndServe(":8080", r)
+	err := http.ListenAndServe(addrString, r)
 
 	if err != nil {
 		panic(err)
