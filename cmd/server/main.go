@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/Meowizz/metrics-collector/internal/handler"
@@ -13,7 +14,8 @@ func main() {
 	storage := repository.NewMemStorage()
 	handler := handler.NewMetricsHandler(storage)
 	cfg := ParseFlag()
-	addrString := cfg.Addr.String()
+
+	addr := fmt.Sprintf("%d", cfg.Addr.Port)
 
 	r := chi.NewRouter()
 
@@ -23,7 +25,7 @@ func main() {
 	r.Post("/update/{type}/{name}/{value}", handler.UpdatePage)
 	r.Get("/value/{type}/{name}", handler.GetMetricValue)
 
-	err := http.ListenAndServe(addrString, r)
+	err := http.ListenAndServe(addr, r)
 
 	if err != nil {
 		panic(err)

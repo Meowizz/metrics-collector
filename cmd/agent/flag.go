@@ -12,7 +12,7 @@ type Config struct {
 
 func ParseFlag() *Config {
 	cfg := &Config{
-		Addr:           "http://localhost:8080",
+		Addr:           "localhost:8080",
 		ReportInterval: 10,
 		PollInterval:   2,
 	}

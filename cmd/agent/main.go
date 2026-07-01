@@ -12,6 +12,7 @@ import (
 func main() {
 	cfg := ParseFlag()
 	c := collector.NewCollector()
+
 	s := sender.NewSender(cfg.Addr)
 
 	c.Collect()

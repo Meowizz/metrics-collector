@@ -31,7 +31,7 @@ func (s *Sender) Send(metrics []*collector.Metric) error {
 			return fmt.Errorf("Unkown matric value type: %T", v)
 		}
 
-		url := fmt.Sprintf("%s/update/%s/%s/%s", s.serverURL, metric.Type, metric.Name, valueStr)
+		url := fmt.Sprintf("http://%s/update/%s/%s/%s", s.serverURL, metric.Type, metric.Name, valueStr)
 		req, err := http.NewRequest("POST", url, nil)
 
 		if err != nil {
