@@ -15,7 +15,7 @@ func main() {
 	handler := handler.NewMetricsHandler(storage)
 	cfg := ParseFlag()
 
-	addr := fmt.Sprintf("%d", cfg.Addr.Port)
+	addr := fmt.Sprintf(":%d", cfg.Addr.Port)
 
 	r := chi.NewRouter()
 
