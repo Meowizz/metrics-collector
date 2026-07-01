@@ -12,8 +12,8 @@ import (
 func main() {
 	cfg := ParseFlag()
 	c := collector.NewCollector()
-
-	s := sender.NewSender(cfg.Addr)
+	address := "http://" + cfg.Addr
+	s := sender.NewSender(address)
 
 	c.Collect()
 
