@@ -17,8 +17,8 @@ func ParseFlag() *Config {
 		PollInterval:   2,
 	}
 	flag.StringVar(&cfg.Addr, "a", cfg.Addr, "Net address host:port")
-	flag.IntVar(&cfg.ReportInterval, "r", 10, "report interval in seconds")
-	flag.IntVar(&cfg.PollInterval, "p", 2, "poll interval in seconds")
+	flag.IntVar(&cfg.ReportInterval, "r", cfg.ReportInterval, "report interval in seconds")
+	flag.IntVar(&cfg.PollInterval, "p", cfg.PollInterval, "poll interval in seconds")
 
 	flag.Parse()
 	return cfg
