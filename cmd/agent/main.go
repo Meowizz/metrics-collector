@@ -10,8 +10,10 @@ import (
 )
 
 func main() {
+	cfg := ParseFlag()
 	c := collector.NewCollector()
-	s := sender.NewSender("http://localhost:8080")
+	address := "http://" + cfg.Addr
+	s := sender.NewSender(address)
 
 	c.Collect()
 
@@ -19,7 +21,7 @@ func main() {
 		for {
 			c.Collect()
 			fmt.Println("Метрики собраны")
-			time.Sleep(2 * time.Second)
+			time.Sleep(time.Duration(cfg.PollInterval) * time.Second)
 		}
 	}()
 
@@ -33,7 +35,7 @@ func main() {
 			} else {
 				fmt.Println("Метрики отправлены")
 			}
-			time.Sleep(10 * time.Second)
+			time.Sleep(time.Duration(cfg.ReportInterval) * time.Second)
 		}
 	}()
 
