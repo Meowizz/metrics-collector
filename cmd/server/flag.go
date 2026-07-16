@@ -9,11 +9,12 @@ import (
 )
 
 type ConfigAddr struct {
-	Addr string `env:"ADDRESS" envDefault:"localhost:8080"`
+	Addr     string `env:"ADDRESS" envDefault:"localhost:8080"`
+	LogLevel string `env:"LOG_LEVEL" envDefault:"info"`
 }
 
 func ParseFlag() *ConfigAddr {
-	var flagAddr string
+	var flagAddr, flagLogLevel string
 	cfg := &ConfigAddr{}
 	err := env.Parse(cfg)
 
@@ -22,10 +23,14 @@ func ParseFlag() *ConfigAddr {
 	}
 
 	flag.StringVar(&flagAddr, "a", "", "Net address host:port")
+	flag.StringVar(&flagLogLevel, "l", "", "Log level")
 	flag.Parse()
 
 	if os.Getenv("ADDRESS") == "" && flagAddr != "" {
 		cfg.Addr = flagAddr
+	}
+	if os.Getenv("LOG_LEVEL") == "" && flagLogLevel != "" {
+		cfg.LogLevel = flagLogLevel
 	}
 
 	return cfg

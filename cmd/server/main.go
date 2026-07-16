@@ -4,9 +4,11 @@ import (
 	"net/http"
 
 	"github.com/Meowizz/metrics-collector/internal/handler"
+	"github.com/Meowizz/metrics-collector/internal/logger"
 	"github.com/Meowizz/metrics-collector/internal/repository"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -14,17 +16,23 @@ func main() {
 	handler := handler.NewMetricsHandler(storage)
 	cfg := ParseFlag()
 
+	if err := logger.Initialize(cfg.LogLevel); err != nil {
+		panic("Failed to initialized logger: " + err.Error())
+	}
+
 	r := chi.NewRouter()
 
-	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	r.Use(logger.WithLogging)
 
 	r.Post("/update/{type}/{name}/{value}", handler.UpdatePage)
 	r.Get("/value/{type}/{name}", handler.GetMetricValue)
 
+	logger.Log.Info("Starting server", zap.String("address", cfg.Addr))
+
 	err := http.ListenAndServe(cfg.Addr, r)
 
 	if err != nil {
-		panic(err)
+		logger.Log.Fatal("Server failed", zap.Error(err))
 	}
 }
