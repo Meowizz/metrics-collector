@@ -29,6 +29,8 @@ func main() {
 	r.Get("/value/{type}/{name}", handler.GetMetricValue)
 	r.Post("/update", handler.UpdateMetricJSON)
 	r.Post("/value", handler.ValueMetricJSON)
+	r.Post("/update/", handler.UpdateMetricJSON)
+	r.Post("/value/", handler.ValueMetricJSON)
 
 	logger.Log.Info("Starting server", zap.String("address", cfg.Addr))
 
