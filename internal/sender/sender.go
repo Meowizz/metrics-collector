@@ -74,23 +74,26 @@ func (s *Sender) SendJSON(metrics []*collector.Metric) error {
 		jsonBytes, err := json.Marshal(reqMetric)
 		if err != nil {
 			return fmt.Errorf("Failed to marshal metric %s: %w", metric.Name, err)
+
 		}
 
 		req, err := http.NewRequest(http.MethodPost, s.serverURL+"/update", bytes.NewReader(jsonBytes))
 		if err != nil {
-			return fmt.Errorf("Failed to create request for &s: %w", metric.Name, err)
+			return fmt.Errorf("Failed to create request for %s: %w", metric.Name, err)
+
 		}
 
 		req.Header.Set("Content-Type", "application/json")
 
 		resp, err := s.client.Do(req)
 		if err != nil {
-			return fmt.Errorf("failed to send metric %s: %w", metric.Name, err)
+			return fmt.Errorf("Failed to send metric %s: %w", metric.Name, err)
 		}
 		resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("server returned status %d for metric %s", resp.StatusCode, metric.Name)
+			return fmt.Errorf("Server returned status %d for metric %s", resp.StatusCode, metric.Name)
+
 		}
 	}
 	return nil
