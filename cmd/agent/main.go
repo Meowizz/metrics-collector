@@ -29,7 +29,7 @@ func main() {
 		for {
 			metrics := c.GetMetrics()
 			fmt.Printf("Отправляем %d метрик...\n", len(metrics))
-			err := s.Send(metrics)
+			err := s.SendJSON(metrics)
 			if err != nil {
 				log.Printf("Failed to send metrics:%v", err)
 			} else {
