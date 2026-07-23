@@ -44,5 +44,6 @@ func ParseFlag() *Config {
 		}
 		cfg.PollInterval = pollInterval
 	}
+
 	return cfg
 }

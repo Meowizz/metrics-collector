@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/Meowizz/metrics-collector/internal/handler"
 	"github.com/Meowizz/metrics-collector/internal/logger"
@@ -19,6 +20,24 @@ func main() {
 
 	if err := logger.Initialize(cfg.LogLevel); err != nil {
 		panic("Failed to initialized logger: " + err.Error())
+	}
+
+	if cfg.Restore {
+		if err := storage.LoadFromFile(cfg.FileStoragePath); err != nil {
+			logger.Log.Error("Ошибка фонового сохранения", zap.Error(err))
+		}
+	}
+
+	if cfg.StoreInterval > 0 {
+		go func() {
+			for {
+				time.Sleep(time.Duration(cfg.StoreInterval) * time.Second)
+
+				if err := storage.SaveToFile(cfg.FileStoragePath); err != nil {
+					logger.Log.Error("Ошибка фонового сохранения", zap.Error(err))
+				}
+			}
+		}()
 	}
 
 	r := chi.NewRouter()
