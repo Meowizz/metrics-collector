@@ -2,9 +2,14 @@ package sender
 
 import (
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/Meowizz/metrics-collector/internal/collector"
 	models "github.com/Meowizz/metrics-collector/internal/model"
@@ -16,10 +21,59 @@ type Sender struct {
 }
 
 func NewSender(serverURL string) *Sender {
+	client := &http.Client{
+		Transport: &GzipTransport{Transport: http.DefaultTransport},
+		Timeout:   10 * time.Second,
+	}
 	return &Sender{
 		serverURL: serverURL,
-		client:    &http.Client{},
+		client:    client,
 	}
+}
+
+type GzipTransport struct {
+	Transport http.RoundTripper
+}
+
+func (g *GzipTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.Header.Get("Content-Encoding") == "gzip" ||
+		!strings.Contains(req.Header.Get("Content-Type"), "application/json") {
+		return g.transport().RoundTrip(req)
+	}
+
+	bodyBytes, err := io.ReadAll(req.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read body: %w", err)
+	}
+	req.Body.Close()
+
+	var buf bytes.Buffer
+	gw := gzip.NewWriter(&buf)
+	if _, err := gw.Write(bodyBytes); err != nil {
+		return nil, fmt.Errorf("gzip write: %w", err)
+	}
+	if err := gw.Close(); err != nil {
+		return nil, fmt.Errorf("gzip close: %w", err)
+	}
+
+	newReq := req.Clone(req.Context())
+	newReq.Body = io.NopCloser(&buf)
+	newReq.ContentLength = int64(buf.Len())
+	newReq.Header.Set("Content-Encoding", "gzip")
+	newReq.Header.Set("Content-Length", strconv.Itoa(buf.Len()))
+
+	newReq.GetBody = func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(buf.Bytes())), nil
+	}
+
+	return g.transport().RoundTrip(newReq)
+}
+
+func (g *GzipTransport) transport() http.RoundTripper {
+	if g.Transport != nil {
+		return g.Transport
+	}
+	return http.DefaultTransport
 }
 
 func (s *Sender) Send(metrics []*collector.Metric) error {
@@ -89,6 +143,7 @@ func (s *Sender) SendJSON(metrics []*collector.Metric) error {
 		if err != nil {
 			return fmt.Errorf("Failed to send metric %s: %w", metric.Name, err)
 		}
+		io.Copy(io.Discard, resp.Body)
 		resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {

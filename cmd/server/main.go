@@ -5,6 +5,7 @@ import (
 
 	"github.com/Meowizz/metrics-collector/internal/handler"
 	"github.com/Meowizz/metrics-collector/internal/logger"
+	appMiddleware "github.com/Meowizz/metrics-collector/internal/middleware"
 	"github.com/Meowizz/metrics-collector/internal/repository"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -27,10 +28,10 @@ func main() {
 
 	r.Post("/update/{type}/{name}/{value}", handler.UpdatePage)
 	r.Get("/value/{type}/{name}", handler.GetMetricValue)
-	r.Post("/update", handler.UpdateMetricJSON)
-	r.Post("/value", handler.ValueMetricJSON)
-	r.Post("/update/", handler.UpdateMetricJSON)
-	r.Post("/value/", handler.ValueMetricJSON)
+	r.With(appMiddleware.GzipMiddleware).Post("/update", handler.UpdateMetricJSON)
+	r.With(appMiddleware.GzipMiddleware).Post("/value", handler.ValueMetricJSON)
+	r.With(appMiddleware.GzipMiddleware).Post("/update/", handler.UpdateMetricJSON)
+	r.With(appMiddleware.GzipMiddleware).Post("/value/", handler.ValueMetricJSON)
 
 	logger.Log.Info("Starting server", zap.String("address", cfg.Addr))
 
