@@ -26,6 +26,7 @@ func main() {
 	r.Use(middleware.Recoverer)
 	r.Use(logger.WithLogging)
 
+	r.With(appMiddleware.GzipMiddleware).Get("/", handler.MainPage)
 	r.Post("/update/{type}/{name}/{value}", handler.UpdatePage)
 	r.Get("/value/{type}/{name}", handler.GetMetricValue)
 	r.With(appMiddleware.GzipMiddleware).Post("/update", handler.UpdateMetricJSON)

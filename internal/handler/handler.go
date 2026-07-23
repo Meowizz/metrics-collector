@@ -20,6 +20,27 @@ func NewMetricsHandler(storage repository.Storage) *MetricsHandler {
 	return &MetricsHandler{storage: storage}
 }
 
+func (m *MetricsHandler) MainPage(rw http.ResponseWriter, rq *http.Request) {
+	if rq.Method != http.MethodGet {
+		http.Error(rw, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	rw.Header().Set("Content-Type", "text/html")
+	rw.WriteHeader(http.StatusOK)
+
+	htmlContent := `<!DOCTYPE html>
+<html>
+<head><title>Metrics Collector</title></head>
+<body>
+	<h1>Page for autotest Iter8</h1>
+	<p>Server is running and serving metrics.</p>
+</body>
+</html>`
+
+	rw.Write([]byte(htmlContent))
+}
+
 func (m *MetricsHandler) UpdatePage(res http.ResponseWriter, req *http.Request) {
 	log.Printf("Получен запрос: %s %s", req.Method, req.URL.Path)
 	if req.Method != http.MethodPost {
@@ -186,6 +207,7 @@ func (m *MetricsHandler) ValueMetricJSON(rw http.ResponseWriter, rq *http.Reques
 }
 
 func (m *MetricsHandler) RegisterRouters(r chi.Router) {
+	r.Get("/", m.MainPage)
 	r.Get("/value/{type}/{name}", m.GetMetricValue)
 	r.Post("/update/{type}/{name}/{value}", m.UpdatePage)
 	r.Post("/update", m.UpdateMetricJSON)
