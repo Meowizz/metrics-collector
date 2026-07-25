@@ -93,6 +93,7 @@ func (m *MemStorage) LoadFromFile(filepath string) error {
 
 func (m *MemStorage) SaveToFile(filepath string) error {
 	m.mu.RLock()
+	defer m.mu.RUnlock()
 
 	state := SavedState{
 		Counters: make(map[string]int64, len(m.counter)),
@@ -106,8 +107,6 @@ func (m *MemStorage) SaveToFile(filepath string) error {
 	for k, v := range m.gauge {
 		state.Gauges[k] = v
 	}
-
-	m.mu.RUnlock()
 
 	file, err := os.Create(filepath)
 	if err != nil {

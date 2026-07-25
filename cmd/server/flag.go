@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"log"
-	"os"
 
 	"github.com/caarlos0/env/v6"
 )
@@ -32,34 +31,25 @@ func ParseFlag() *ConfigAddr {
 	flag.StringVar(&flagLogLevel, "l", "", "Log level")
 	flag.IntVar(&flagStoreInterval, "i", 0, "The -i flag and the STORE_INTERVAL environment variable are the time interval in seconds during which the server maintains a current connection to disk ")
 	flag.StringVar(&flagFileStoragePath, "f", "", "The -f flag and the FILE_STORAGE_PATH environment variable are the path to the file where the current value is stored.")
-	flag.BoolVar(&flagRestore,"r",false,"The -r flag and the RESTORE environment variable are a Boolean value (true/false) that determines whether previously saved values ​​should be loaded from the specified file when the server starts.")
+	flag.BoolVar(&flagRestore, "r", false, "The -r flag and the RESTORE environment variable are a Boolean value (true/false) that determines whether previously saved values ​​should be loaded from the specified file when the server starts.")
 
 	flag.Parse()
 
-	flag.Visit(func(f *flag.Flag) {
-		switch f.Name {
-		case "a":
-			if os.Getenv("ADDRESS") == "" {
-				cfg.Addr = flagAddr
-			}
-		case "l":
-			if os.Getenv("LOG_LEVEL") == "" {
-				cfg.LogLevel = flagLogLevel
-			}
-		case "i":
-			if os.Getenv("STORE_INTERVAL") == "" {
-				cfg.StoreInterval = flagStoreInterval
-			}
-		case "f":
-			if os.Getenv("FILE_STORAGE_PATH") == "" {
-				cfg.FileStoragePath = flagFileStoragePath
-			}
-		case "r":
-			if os.Getenv("RESTORE") == "" {
-				cfg.Restore = flagRestore
-			}
-		}
-	})
+	if flagAddr != "" {
+		cfg.Addr = flagAddr
+	}
+	if flagLogLevel != "" {
+		cfg.LogLevel = flagLogLevel
+	}
+	if flagStoreInterval != 0 {
+		cfg.StoreInterval = flagStoreInterval
+	}
+	if flagFileStoragePath != "" {
+		cfg.FileStoragePath = flagFileStoragePath
+	}
 
+	if flagRestore {
+		cfg.Restore = flagRestore
+	}
 	return cfg
 }

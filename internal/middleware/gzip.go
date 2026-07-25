@@ -8,9 +8,9 @@ import (
 )
 
 type compressWriter struct {
-	w           http.ResponseWriter
-	zw          *gzip.Writer
-	wroteHeader bool
+	w              http.ResponseWriter
+	zw             *gzip.Writer
+	wroteHeader    bool
 	shouldCompress bool
 }
 
@@ -40,6 +40,7 @@ func (c *compressWriter) WriteHeader(statusCode int) {
 		contentType := c.w.Header().Get("Content-Type")
 		if strings.Contains(contentType, "application/json") ||
 			strings.Contains(contentType, "text/html") {
+			c.shouldCompress = true
 			c.w.Header().Set("Content-Encoding", "gzip")
 			c.w.Header().Del("Content-Length")
 		}
