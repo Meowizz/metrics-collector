@@ -11,6 +11,7 @@ type compressWriter struct {
 	w           http.ResponseWriter
 	zw          *gzip.Writer
 	wroteHeader bool
+	shouldCompress bool
 }
 
 func newCompressWriter(w http.ResponseWriter) *compressWriter {
@@ -27,6 +28,9 @@ func (c *compressWriter) Header() http.Header {
 func (c *compressWriter) Write(p []byte) (int, error) {
 	if !c.wroteHeader {
 		c.WriteHeader(http.StatusOK)
+	}
+	if !c.shouldCompress {
+		return c.w.Write(p)
 	}
 	return c.zw.Write(p)
 }
@@ -85,7 +89,11 @@ func GzipMiddleware(next http.Handler) http.Handler {
 
 		if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
 			cw := newCompressWriter(w)
-			defer cw.zw.Close()
+			defer func() {
+				if cw.shouldCompress {
+					cw.zw.Close()
+				}
+			}()
 			ow = cw
 		}
 
