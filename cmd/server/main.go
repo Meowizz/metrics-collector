@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"net/http"
 	"time"
 
@@ -14,17 +15,39 @@ import (
 )
 
 func main() {
-	storage := repository.NewMemStorage()
-	handler := handler.NewMetricsHandler(storage)
+	//storage := repository.NewMemStorage()
+	//handler := handler.NewMetricsHandler(storage)
 	cfg := ParseFlag()
 
 	if err := logger.Initialize(cfg.LogLevel); err != nil {
 		panic("Failed to initialized logger: " + err.Error())
 	}
 
+	var storage repository.Storage
+
+	if cfg.DatabaseDSN != "" {
+		log.Print("Initializing PostgreSQL storage")
+		pgStore, err := repository.NewPostgresStorage(cfg.DatabaseDSN)
+		if err != nil {
+			log.Fatalf("Failed to connect to PostgreSQL %v",err)
+		}
+		storage = pgStore
+		defer pgStore.Close()
+	} else {
+		log.Println("Using in-memory storage")
+		storage = repository.NewMemStorage()
+	}
+	handler := handler.NewMetricsHandler(storage)
+
 	if cfg.Restore {
-		if err := storage.LoadFromFile(cfg.FileStoragePath); err != nil {
-			logger.Log.Error("Ошибка фонового сохранения", zap.Error(err))
+		if memStore, ok := storage.(*repository.MemStorage); ok {
+			if err := memStore.LoadFromFile(cfg.FileStoragePath); err != nil {
+				logger.Log.Error("Ошибка при загрузке из файла", zap.Error(err))
+			} else {
+				logger.Log.Info("Метрики успешно загружены из файла")
+			}
+		} else {
+			logger.Log.Info("Восстановление из файла пропущено: используется PostgreSQL")
 		}
 	}
 
@@ -33,12 +56,14 @@ func main() {
 			for {
 				time.Sleep(time.Duration(cfg.StoreInterval) * time.Second)
 
-				if err := storage.SaveToFile(cfg.FileStoragePath); err != nil {
-					logger.Log.Error("Ошибка фонового сохранения", zap.Error(err))
+				if memStore, ok := storage.(*repository.MemStorage); ok {
+					if err := memStore.SaveToFile(cfg.FileStoragePath); err != nil {
+						logger.Log.Error("Ошибка фонового сохранения", zap.Error(err))
+					}
 				}
 			}
 		}()
-	}
+	} 
 
 	r := chi.NewRouter()
 
@@ -52,6 +77,7 @@ func main() {
 	r.With(appMiddleware.GzipMiddleware).Post("/value", handler.ValueMetricJSON)
 	r.With(appMiddleware.GzipMiddleware).Post("/update/", handler.UpdateMetricJSON)
 	r.With(appMiddleware.GzipMiddleware).Post("/value/", handler.ValueMetricJSON)
+	r.Get("/ping", handler.Ping)
 
 	logger.Log.Info("Starting server", zap.String("address", cfg.Addr))
 
@@ -61,3 +87,4 @@ func main() {
 		logger.Log.Fatal("Server failed", zap.Error(err))
 	}
 }
+

@@ -13,6 +13,7 @@ type ConfigAddr struct {
 	StoreInterval   int    `env:"STORE_INTERVAL" envDefault:"300"`
 	FileStoragePath string `env:"FILE_STORAGE_PATH" envDefault:"./home/storage.json"`
 	Restore         bool   `env:"RESTORE" envDefault:"false"`
+	DatabaseDSN     string `env:"DATABASE_DSN" envDefaut:""`
 }
 
 func ParseFlag() *ConfigAddr {
@@ -26,12 +27,14 @@ func ParseFlag() *ConfigAddr {
 	var flagStoreInterval int
 	var flagFileStoragePath string
 	var flagRestore bool
+	var flagDatabaseDSN string
 
 	flag.StringVar(&flagAddr, "a", "", "Net address host:port")
 	flag.StringVar(&flagLogLevel, "l", "", "Log level")
 	flag.IntVar(&flagStoreInterval, "i", 0, "The -i flag and the STORE_INTERVAL environment variable are the time interval in seconds during which the server maintains a current connection to disk ")
 	flag.StringVar(&flagFileStoragePath, "f", "", "The -f flag and the FILE_STORAGE_PATH environment variable are the path to the file where the current value is stored.")
 	flag.BoolVar(&flagRestore, "r", false, "The -r flag and the RESTORE environment variable are a Boolean value (true/false) that determines whether previously saved values ​​should be loaded from the specified file when the server starts.")
+	flag.StringVar(&flagDatabaseDSN, "d", "", "Database connection setting")
 
 	flag.Parse()
 
@@ -50,6 +53,10 @@ func ParseFlag() *ConfigAddr {
 
 	if flagRestore {
 		cfg.Restore = flagRestore
+	}
+
+	if flagDatabaseDSN != "" {
+		cfg.DatabaseDSN = flagDatabaseDSN
 	}
 	return cfg
 }
