@@ -26,10 +26,15 @@ func main() {
 	var storage repository.Storage
 
 	if cfg.DatabaseDSN != "" {
+
+		if err := repository.RunMigrations(cfg.DatabaseDSN, "./migrations"); err != nil {
+			log.Fatalf("Migration failed: %v", err)
+		}
+
 		log.Print("Initializing PostgreSQL storage")
 		pgStore, err := repository.NewPostgresStorage(cfg.DatabaseDSN)
 		if err != nil {
-			log.Fatalf("Failed to connect to PostgreSQL %v",err)
+			log.Fatalf("Failed to connect to PostgreSQL %v", err)
 		}
 		storage = pgStore
 		defer pgStore.Close()
@@ -63,7 +68,7 @@ func main() {
 				}
 			}
 		}()
-	} 
+	}
 
 	r := chi.NewRouter()
 
@@ -87,4 +92,3 @@ func main() {
 		logger.Log.Fatal("Server failed", zap.Error(err))
 	}
 }
-

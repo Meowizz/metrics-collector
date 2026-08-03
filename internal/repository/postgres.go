@@ -1,9 +1,14 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
+	"log"
 
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
@@ -27,6 +32,27 @@ func NewPostgresStorage(dsn string) (*PostgresStorage, error) {
 	}, nil
 }
 
+func RunMigrations(dsn string, migrationPath string) error {
+	m, err := migrate.New(
+		"postgres://"+migrationPath,
+		dsn,
+	)
+
+	if err != nil {
+		return fmt.Errorf("Failed to create migrate instance: %w", err)
+	}
+
+	if err := m.Up(); err != nil {
+		if err == migrate.ErrNoChange {
+			log.Println("Database schema is up to date")
+			return nil
+		}
+		return fmt.Errorf("failed to run migrations: %w", err)
+	}
+	log.Println("Migrations applied successfully")
+	return nil
+}
+
 func (p *PostgresStorage) Ping() error {
 	return p.db.Ping()
 }
@@ -36,21 +62,57 @@ func (p *PostgresStorage) Close() error {
 }
 
 func (p *PostgresStorage) UpdateGauge(name string, value float64) error {
-	// TODO
-	return nil
+	query := `
+		INSERT INTO metrics (id, type, value)
+		VALUES ($1, 'gauge', $2)
+		ON CONFLICT (id)
+		DO UPDATE SET value = $2
+	`
+
+	_, err := p.db.ExecContext(context.Background(), query, name, value)
+	return err
 }
 
 func (p *PostgresStorage) UpdateCounter(name string, value int64) error {
-	// TODO
-	return nil
+	query := `
+		INSERT INTO metrics (id, type, value)
+		VALUES ($1, 'counter', $2)
+		ON CONFLICT (id)
+		DO UPDATE SET value = metrics.value + $2
+	`
+
+	_, err := p.db.ExecContext(context.Background(), query, name, value)
+	return err
 }
 
 func (p *PostgresStorage) GetGauge(name string) (float64, bool) {
-	// TODO
+	query := `SELECT value FROM metrics WHERE id = $1 AND type = 'gauge'`
+
+	var value float64
+	err := p.db.QueryRowContext(context.Background(), query, name).Scan(&value)
+
+	if err != nil {
+		if err != sql.ErrNoRows {
+			return 0, false
+		}
+		log.Printf("Error getting gauge %s: %v", name, err)
+		return 0, false
+	}
 	return 0, false
 }
 
 func (p *PostgresStorage) GetCounter(name string) (int64, bool) {
-	// TODO
+	query := `SELECT value FROM metrics WHERE id = $1 AND type = 'counter'`
+
+	var value int64
+	err := p.db.QueryRowContext(context.Background(), query, name).Scan(&value)
+
+	if err != nil {
+		if err != sql.ErrNoRows {
+			return 0, false
+		}
+		log.Printf("Error getting gauge %s: %v", name, err)
+		return 0, false
+	}
 	return 0, false
 }
