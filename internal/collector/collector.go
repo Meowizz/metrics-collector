@@ -3,6 +3,7 @@ package collector
 import (
 	"math/rand"
 	"runtime"
+	"sync"
 	"time"
 )
 
@@ -20,6 +21,7 @@ type Metric struct {
 }
 
 type Collector struct {
+	mu      sync.RWMutex
 	metrics map[string]*Metric
 }
 
@@ -33,6 +35,9 @@ func NewCollector() *Collector {
 func (c *Collector) Collect() {
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	c.metrics["Alloc"] = &Metric{Type: Gauge, Name: "Alloc", Value: float64(memStats.Alloc)}
 	c.metrics["BuckHashSys"] = &Metric{Type: Gauge, Name: "BuckHashSys", Value: float64(memStats.BuckHashSys)}
@@ -75,6 +80,10 @@ func (c *Collector) Collect() {
 }
 
 func (c *Collector) GetMetrics() []*Metric {
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	result := make([]*Metric, 0, len(c.metrics))
 	for _, metric := range c.metrics {
 		result = append(result, metric)

@@ -23,6 +23,7 @@ type Storage interface {
 	UpdateCounter(name string, value int64) error
 	GetGauge(name string) (float64, bool)
 	GetCounter(name string) (int64, bool)
+	Ping() error
 }
 
 func NewMemStorage() *MemStorage {
@@ -117,5 +118,9 @@ func (m *MemStorage) SaveToFile(filepath string) error {
 	if err := json.NewEncoder(file).Encode(state); err != nil {
 		return fmt.Errorf("Failed to encode metric %w", err)
 	}
+	return nil
+}
+
+func (m *MemStorage) Ping() error {
 	return nil
 }
