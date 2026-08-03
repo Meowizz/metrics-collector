@@ -34,7 +34,7 @@ func NewPostgresStorage(dsn string) (*PostgresStorage, error) {
 
 func RunMigrations(dsn string, migrationPath string) error {
 	m, err := migrate.New(
-		"postgres://"+migrationPath,
+		"file://"+migrationPath,
 		dsn,
 	)
 
@@ -81,7 +81,7 @@ func (p *PostgresStorage) UpdateCounter(name string, value int64) error {
 		DO UPDATE SET value = metrics.value + $2
 	`
 
-	_, err := p.db.ExecContext(context.Background(), query, name, value)
+	_, err := p.db.ExecContext(context.Background(), query, name, float64(value))
 	return err
 }
 
@@ -92,27 +92,28 @@ func (p *PostgresStorage) GetGauge(name string) (float64, bool) {
 	err := p.db.QueryRowContext(context.Background(), query, name).Scan(&value)
 
 	if err != nil {
-		if err != sql.ErrNoRows {
+		if err == sql.ErrNoRows {
 			return 0, false
 		}
 		log.Printf("Error getting gauge %s: %v", name, err)
 		return 0, false
 	}
-	return 0, false
+	return value, true
 }
 
 func (p *PostgresStorage) GetCounter(name string) (int64, bool) {
 	query := `SELECT value FROM metrics WHERE id = $1 AND type = 'counter'`
 
-	var value int64
-	err := p.db.QueryRowContext(context.Background(), query, name).Scan(&value)
+	var valueFloat float64
+
+	err := p.db.QueryRowContext(context.Background(), query, name).Scan(&valueFloat)
 
 	if err != nil {
-		if err != sql.ErrNoRows {
+		if err == sql.ErrNoRows {
 			return 0, false
 		}
 		log.Printf("Error getting gauge %s: %v", name, err)
 		return 0, false
 	}
-	return 0, false
+	return int64(valueFloat), true
 }
