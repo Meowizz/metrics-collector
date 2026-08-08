@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 
+	models "github.com/Meowizz/metrics-collector/internal/model"
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
@@ -116,4 +117,58 @@ func (p *PostgresStorage) GetCounter(name string) (int64, bool) {
 		return 0, false
 	}
 	return int64(valueFloat), true
+}
+
+func (p *PostgresStorage) UpdateBatch(metrics []models.Metrics) error {
+	ctx := context.Background()
+
+	tx, err := p.db.BeginTx(ctx, nil)
+
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
+	stmtGauge, err := tx.PrepareContext(ctx, `
+	INSERT INTO metrics (id, type, value)
+	VALUES ($1, 'gauge', $2)
+	ON CONFLICT (id) DO UPDATE SET value = $2`)
+
+	if err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to prepare gauge stmt: %w", err)
+	}
+
+	defer stmtGauge.Close()
+
+	stmtCounter, err := tx.PrepareContext(ctx, `
+	INSERT INTO metrics (id, type, value)
+	VALUES ($1, 'counter', $2)
+	ON CONFLICT (id) DO UPDATE SET value = metrics.value + $2
+`)
+	if err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to prepare counter stmt: %w", err)
+	}
+
+	defer stmtCounter.Close()
+
+	for _, metric := range metrics {
+		switch metric.MType {
+		case models.Gauge:
+			if metric.Value != nil {
+				if _, err := stmtGauge.ExecContext(ctx, metric.ID, *metric.Value); err != nil {
+					tx.Rollback()
+					return fmt.Errorf("failed to insert gauge %s: %w", metric.ID, err)
+				}
+			}
+		case models.Counter:
+			if metric.Delta != nil {
+				if _, err := stmtCounter.ExecContext(ctx, metric.ID, float64(*metric.Delta)); err != nil {
+					tx.Rollback()
+					return fmt.Errorf("failed to insert counter %s: %w", metric.ID, err)
+				}
+			}
+		}
+	}
+	return tx.Commit()
 }

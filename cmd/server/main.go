@@ -82,6 +82,7 @@ func main() {
 	r.With(appMiddleware.GzipMiddleware).Post("/value", handler.ValueMetricJSON)
 	r.With(appMiddleware.GzipMiddleware).Post("/update/", handler.UpdateMetricJSON)
 	r.With(appMiddleware.GzipMiddleware).Post("/value/", handler.ValueMetricJSON)
+	r.With(appMiddleware.GzipMiddleware).Post("/updates/", handler.ValueMetricJSON)
 	r.Get("/ping", handler.Ping)
 
 	logger.Log.Info("Starting server", zap.String("address", cfg.Addr))
