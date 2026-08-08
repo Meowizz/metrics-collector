@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"time"
@@ -24,6 +25,8 @@ func main() {
 	}
 
 	var storage repository.Storage
+
+	ctx := context.Background()
 
 	if cfg.DatabaseDSN != "" {
 
@@ -57,19 +60,30 @@ func main() {
 	}
 
 	if cfg.StoreInterval > 0 {
-		go func() {
-			for {
-				time.Sleep(time.Duration(cfg.StoreInterval) * time.Second)
+		if memStore, ok := storage.(*repository.MemStorage); ok {
+			go func() {
+				ticker := time.NewTicker(time.Duration(cfg.StoreInterval) * time.Second)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-ctx.Done():
+						if err := memStore.SaveToFile(cfg.FileStoragePath); err != nil {
+							logger.Log.Error("Ошибка финального сохранения при остановке", zap.Error(err))
+						} else {
+							logger.Log.Info("Метрики успешно сохранены перед остановкой")
+						}
+						logger.Log.Info("Горутина фонового сохранения завершена")
+						return
 
-				if memStore, ok := storage.(*repository.MemStorage); ok {
-					if err := memStore.SaveToFile(cfg.FileStoragePath); err != nil {
-						logger.Log.Error("Ошибка фонового сохранения", zap.Error(err))
+					case <-ticker.C:
+						if err := memStore.SaveToFile(cfg.FileStoragePath); err != nil {
+							logger.Log.Error("Ошибка фонового сохранения", zap.Error(err))
+						}
 					}
 				}
-			}
-		}()
+			}()
+		}
 	}
-
 	r := chi.NewRouter()
 
 	r.Use(middleware.Recoverer)
@@ -82,7 +96,7 @@ func main() {
 	r.With(appMiddleware.GzipMiddleware).Post("/value", handler.ValueMetricJSON)
 	r.With(appMiddleware.GzipMiddleware).Post("/update/", handler.UpdateMetricJSON)
 	r.With(appMiddleware.GzipMiddleware).Post("/value/", handler.ValueMetricJSON)
-	r.With(appMiddleware.GzipMiddleware).Post("/updates/", handler.ValueMetricJSON)
+	r.With(appMiddleware.GzipMiddleware).Post("/updates/", handler.UpdatesHandler)
 	r.Get("/ping", handler.Ping)
 
 	logger.Log.Info("Starting server", zap.String("address", cfg.Addr))
