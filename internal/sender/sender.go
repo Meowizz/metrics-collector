@@ -153,3 +153,58 @@ func (s *Sender) SendJSON(metrics []*collector.Metric) error {
 	}
 	return nil
 }
+
+func (s *Sender) SendBatch(metrics []*collector.Metric) error {
+
+	if len(metrics) == 0 {
+		return nil
+	}
+
+	apiMetrics := make([]models.Metrics, 0, len(metrics))
+
+	for _, metric := range metrics {
+		reqMetric := models.Metrics{
+			ID:    metric.Name,
+			MType: string(metric.Type),
+		}
+
+		switch v := metric.Value.(type) {
+		case float64:
+			reqMetric.Value = &v
+		case int64:
+			reqMetric.Delta = &v
+		default:
+			return fmt.Errorf("Unknown metric type: %T", v)
+		}
+
+		apiMetrics = append(apiMetrics, reqMetric)
+	}
+
+	jsonBytes, err := json.Marshal(apiMetrics)
+	if err != nil {
+		return fmt.Errorf("Failed to marshal metric to batch: %w", err)
+
+	}
+
+	req, err := http.NewRequest(http.MethodPost, s.serverURL+"/updates/", bytes.NewReader(jsonBytes))
+
+	if err != nil {
+		return fmt.Errorf("failed to create batch request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to send batch: %w", err)
+	}
+
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("server returned status %d for batch", resp.StatusCode)
+	}
+
+	return nil
+}
