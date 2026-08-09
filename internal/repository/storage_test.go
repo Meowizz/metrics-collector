@@ -9,7 +9,6 @@ import (
 func TestMemStorage_BasicOperations(t *testing.T) {
 	storage := NewMemStorage()
 
-
 	err := storage.UpdateGauge("temp", 25.5)
 	if err != nil {
 		t.Fatalf("UpdateGauge failed: %v", err)
@@ -18,7 +17,6 @@ func TestMemStorage_BasicOperations(t *testing.T) {
 	if !ok || val != 25.5 {
 		t.Errorf("Expected gauge 'temp' to be 25.5, got %v, exists: %v", val, ok)
 	}
-
 
 	err = storage.UpdateCounter("requests", 5)
 	if err != nil {
@@ -34,7 +32,6 @@ func TestMemStorage_BasicOperations(t *testing.T) {
 		t.Errorf("Expected counter 'requests' to be 8, got %v, exists: %v", valInt, ok)
 	}
 
-
 	if err := storage.Ping(); err != nil {
 		t.Errorf("MemStorage Ping should always return nil, got: %v", err)
 	}
@@ -45,17 +42,14 @@ func TestMemStorage_SaveAndLoad(t *testing.T) {
 	tempDir := t.TempDir()
 	filePath := filepath.Join(tempDir, "test_storage.json")
 
-
 	storage1 := NewMemStorage()
 	storage1.UpdateGauge("cpu", 95.0)
 	storage1.UpdateCounter("hits", 100)
-
 
 	err := storage1.SaveToFile(filePath)
 	if err != nil {
 		t.Fatalf("SaveToFile failed: %v", err)
 	}
-
 
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		t.Fatalf("Expected file to be created at %s", filePath)
