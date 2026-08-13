@@ -5,9 +5,9 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
-	"sync"
 
 	"github.com/Meowizz/metrics-collector/internal/agent"
 	"github.com/Meowizz/metrics-collector/internal/collector"
@@ -98,7 +98,7 @@ func main() {
 	}()
 
 	<-quit
-	fmt.Println("\n Получен сигнал завершения. Корректная остановка агента...")
+	fmt.Println("\n Получен сигнал завершения. Корректная остановка агента..")
 
 	wg.Wait()
 	fmt.Println("Агент остановлен.")
