@@ -1,9 +1,12 @@
 package pkg
 
 import (
+	"errors"
 	"fmt"
 	"time"
 )
+
+var ErrNotRetriable = errors.New("operation is not retriable")
 
 func DoWithRetry(operation func() error) error {
 	delays := []time.Duration{1 * time.Second, 3 * time.Second, 5 * time.Second}
@@ -12,7 +15,11 @@ func DoWithRetry(operation func() error) error {
 	for attempt := 0; attempt <= 3; attempt++ {
 		err := operation()
 		if err == nil {
-			return nil // Успех
+			return nil
+		}
+
+		if errors.Is(err, ErrNotRetriable) {
+			return err
 		}
 
 		lastErr = err

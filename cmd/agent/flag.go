@@ -51,7 +51,7 @@ func ParseFlag() *Config {
 	if envBatchSize := os.Getenv("BATCH_SIZE"); envBatchSize != "" {
 		BatchSize, err := strconv.Atoi(envBatchSize)
 		if err != nil {
-			log.Fatal("Unkonwn parametr in env:POLL_INTERVAL")
+			log.Fatal("Unkonwn parametr in env:BATCH_SIZE")
 		}
 		cfg.BatchSize = BatchSize
 	}

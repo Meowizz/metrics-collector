@@ -83,7 +83,7 @@ func (p *PostgresStorage) UpdateGauge(name string, value float64) error {
 			return nil
 		}
 		lastErr = err
-		if isRetriablePgError(err) {
+		if !isRetriablePgError(err) {
 			return fmt.Errorf("Non retriable database error:%w", err)
 		}
 		if attempt < 3 {
@@ -110,7 +110,7 @@ func (p *PostgresStorage) UpdateCounter(name string, value int64) error {
 			return nil
 		}
 		lastErr = err
-		if isRetriablePgError(err) {
+		if !isRetriablePgError(err) {
 			return fmt.Errorf("Non retriable database error:%w", err)
 		}
 		if attempt < 3 {

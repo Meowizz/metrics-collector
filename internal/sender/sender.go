@@ -13,6 +13,7 @@ import (
 
 	"github.com/Meowizz/metrics-collector/internal/collector"
 	models "github.com/Meowizz/metrics-collector/internal/model"
+	"github.com/Meowizz/metrics-collector/pkg"
 )
 
 type Sender struct {
@@ -130,44 +131,38 @@ func (s *Sender) SendJSON(metrics []*collector.Metric) error {
 			return fmt.Errorf("Failed to marshal metric %s: %w", metric.Name, err)
 
 		}
-		var lastErr error
 
-		delays := []time.Duration{1 * time.Second, 3 * time.Second, 5 * time.Second}
-
-		for attempt := 0; attempt <= 3; attempt++ {
+		err = pkg.DoWithRetry(func() error {
 			req, err := http.NewRequest(http.MethodPost, s.serverURL+"/update", bytes.NewReader(jsonBytes))
 			if err != nil {
-				return fmt.Errorf("Failed to create request for %s: %w", metric.Name, err)
-
+				return fmt.Errorf("failed to create request for %s: %w", metric.Name, err)
 			}
 			req.Header.Set("Content-Type", "application/json")
 
 			resp, err := s.client.Do(req)
 			if err != nil {
-				lastErr = fmt.Errorf("network error: %w", err)
-			} else {
-				io.Copy(io.Discard, resp.Body)
-				resp.Body.Close()
-
-				if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-					lastErr = nil
-					break
-				}
-				if resp.StatusCode >= 500 {
-					lastErr = fmt.Errorf("server error status: %d", resp.StatusCode)
-				} else {
-					return fmt.Errorf("client error status %d, not retriable", resp.StatusCode)
-				}
+				return fmt.Errorf("network error: %w", err)
 			}
 
-			if attempt < 3 {
-				time.Sleep(delays[attempt])
+			io.Copy(io.Discard, resp.Body)
+			resp.Body.Close()
+
+			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+				return nil
 			}
-		}
-		if lastErr != nil {
-			return fmt.Errorf("failed to send metric %s after 3 retries: %w", metric.Name, lastErr)
+
+			if resp.StatusCode >= 500 {
+				return fmt.Errorf("server error status: %d", resp.StatusCode)
+			}
+
+			return fmt.Errorf("client error status %d: %w", resp.StatusCode, pkg.ErrNotRetriable)
+		})
+
+		if err != nil {
+			return fmt.Errorf("failed to send metric %s: %w", metric.Name, err)
 		}
 	}
+
 	return nil
 }
 
@@ -203,37 +198,29 @@ func (s *Sender) SendBatch(metrics []*collector.Metric) error {
 
 	}
 
-	var lastErr error
-	delays := []time.Duration{1 * time.Second, 3 * time.Second, 5 * time.Second}
-
-	for attempt := 0; attempt <= 3; attempt++ {
+	return pkg.DoWithRetry(func() error {
 		req, err := http.NewRequest(http.MethodPost, s.serverURL+"/updates", bytes.NewReader(jsonBytes))
 		if err != nil {
-			return fmt.Errorf("failed to create request: %w", err)
+			return err
 		}
 		req.Header.Set("Content-Type", "application/json")
 
 		resp, err := s.client.Do(req)
 		if err != nil {
-			lastErr = fmt.Errorf("network error: %w", err)
-		} else {
-			io.Copy(io.Discard, resp.Body)
-			resp.Body.Close()
-
-			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-				return nil
-			}
-			if resp.StatusCode >= 500 {
-				lastErr = fmt.Errorf("server error status: %d", resp.StatusCode)
-			} else {
-				return fmt.Errorf("client error status %d, not retriable", resp.StatusCode)
-			}
+			return fmt.Errorf("network error: %w", err)
 		}
 
-		if attempt < 3 {
-			time.Sleep(delays[attempt])
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			return nil
 		}
-	}
-	return fmt.Errorf("failed to send batch after 3 retries: %w", lastErr)
+
+		if resp.StatusCode >= 500 {
+			return fmt.Errorf("server error status: %d", resp.StatusCode)
+		}
+		return fmt.Errorf("client error status %d: %w", resp.StatusCode, pkg.ErrNotRetriable)
+	})
 
 }

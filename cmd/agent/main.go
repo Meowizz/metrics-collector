@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	"sync"
 
 	"github.com/Meowizz/metrics-collector/internal/agent"
 	"github.com/Meowizz/metrics-collector/internal/collector"
@@ -22,7 +23,11 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
+	var wg sync.WaitGroup
+
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		ticker := time.NewTicker(time.Duration(cfg.PollInterval) * time.Second)
 		defer ticker.Stop()
 
@@ -40,7 +45,9 @@ func main() {
 		}
 	}()
 
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		if cfg.BatchSize > 0 {
 
 			fmt.Printf("Запущен режим батчей (размер: %d, интервал: %dс)\n", cfg.BatchSize, cfg.ReportInterval)
@@ -93,6 +100,6 @@ func main() {
 	<-quit
 	fmt.Println("\n Получен сигнал завершения. Корректная остановка агента...")
 
-	time.Sleep(500 * time.Millisecond)
+	wg.Wait()
 	fmt.Println("Агент остановлен.")
 }
