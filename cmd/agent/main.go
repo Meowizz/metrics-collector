@@ -23,6 +23,7 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
+	stop := make(chan struct{})
 	var wg sync.WaitGroup
 
 	wg.Add(1)
@@ -36,7 +37,7 @@ func main() {
 
 		for {
 			select {
-			case <-quit:
+			case <-stop:
 				return
 			case <-ticker.C:
 				c.Collect()
@@ -60,7 +61,7 @@ func main() {
 
 			for {
 				select {
-				case <-quit:
+				case <-stop:
 					return
 				case <-ticker.C:
 					metrics := c.GetMetrics()
@@ -79,7 +80,7 @@ func main() {
 
 			for {
 				select {
-				case <-quit:
+				case <-stop:
 					return
 				case <-ticker.C:
 					metrics := c.GetMetrics()
@@ -88,6 +89,7 @@ func main() {
 						err := s.SendJSON(metrics)
 						if err != nil {
 							log.Printf("Failed to send metrics: %v", err)
+							return
 						} else {
 							fmt.Println("Метрики успешно отправлены")
 						}
@@ -100,6 +102,21 @@ func main() {
 	<-quit
 	fmt.Println("\n Получен сигнал завершения. Корректная остановка агента..")
 
-	wg.Wait()
-	fmt.Println("Агент остановлен.")
+	close(stop)
+
+	done := make(chan struct{})
+
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		fmt.Println("Агент остановлен.")
+	case <-time.After(30 * time.Second):
+		fmt.Println("Таймаут при остановке агента (30с). Принудительный выход.")
+
+	}
+
 }
