@@ -64,5 +64,9 @@ func ParseFlag() *ConfigAddr {
 	if flagKey != "" {
 		cfg.Key = flagKey
 	}
+
+	if err := env.Parse(cfg); err != nil {
+		log.Fatalf("Error parsing environment variables: %v", err)
+	}
 	return cfg
 }

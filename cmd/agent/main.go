@@ -89,7 +89,6 @@ func main() {
 						err := s.SendJSON(metrics)
 						if err != nil {
 							log.Printf("Failed to send metrics: %v", err)
-							return
 						} else {
 							fmt.Println("Метрики успешно отправлены")
 						}
