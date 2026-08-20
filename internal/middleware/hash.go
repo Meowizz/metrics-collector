@@ -47,12 +47,18 @@ func HashMiddleware(next http.Handler, key string) http.Handler {
 
 		r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
+		clientHash := r.Header.Get("HashSHA256")
+
+		if clientHash == "" {
+			log.Printf("[SERVER] No HashSHA256 header, skipping check for %s", r.URL.Path)
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		h := sha256.New()
 		h.Write(bodyBytes)
 		h.Write([]byte(key))
 		expectedHash := hex.EncodeToString(h.Sum(nil))
-
-		clientHash := r.Header.Get("HashSHA256")
 
 		log.Printf("[DEBUG HASH] URI: %-15s | ClientHash: '%s' | Expected: '%s' | BodyLen: %3d | KeyLen: %d",
 			r.URL.Path, clientHash, expectedHash, len(bodyBytes), len(key))
