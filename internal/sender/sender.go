@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -41,6 +42,8 @@ type GzipTransport struct {
 }
 
 func calculateHashBody(body []byte, key string) string {
+	log.Printf("[DEBUG AGENT] Hashing -> Body: %q (len: %d), Key: %q (len: %d)",
+	string(body), len(body), key, len(key))
 	h := sha256.New()
 	h.Write(body)
 	h.Write([]byte(key))

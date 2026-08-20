@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"log"
+	"strings"
 
 	"github.com/caarlos0/env/v6"
 )
@@ -62,7 +63,7 @@ func ParseFlag() *ConfigAddr {
 	}
 
 	if flagKey != "" {
-		cfg.Key = flagKey
+		cfg.Key = strings.TrimSpace(flagKey)
 	}
 
 	return cfg
