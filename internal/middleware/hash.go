@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"io"
+	"log"
 	"net/http"
 )
 
@@ -12,6 +13,7 @@ type responseRecorder struct {
 	http.ResponseWriter
 	body        *bytes.Buffer
 	wroteHeader bool
+	statusCode  int
 }
 
 func (r *responseRecorder) Write(b []byte) (int, error) {
@@ -26,7 +28,7 @@ func (r *responseRecorder) WriteHeader(statusCode int) {
 		return
 	}
 	r.wroteHeader = true
-	r.ResponseWriter.WriteHeader(statusCode)
+	r.statusCode = statusCode
 }
 
 func HashMiddleware(next http.Handler, key string) http.Handler {
@@ -36,8 +38,8 @@ func HashMiddleware(next http.Handler, key string) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		bodyBytes, err := io.ReadAll(r.Body)
 
+		bodyBytes, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, "Failed to read request body", http.StatusInternalServerError)
 			return
@@ -50,7 +52,12 @@ func HashMiddleware(next http.Handler, key string) http.Handler {
 		h.Write([]byte(key))
 		expectedHash := hex.EncodeToString(h.Sum(nil))
 
-		if r.Header.Get("HashSHA256") != expectedHash {
+		clientHash := r.Header.Get("HashSHA256")
+
+		log.Printf("[DEBUG HASH] URI: %-15s | ClientHash: '%s' | Expected: '%s' | BodyLen: %3d | KeyLen: %d",
+			r.URL.Path, clientHash, expectedHash, len(bodyBytes), len(key))
+
+		if clientHash != expectedHash {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
 			w.Write([]byte(`{"error": "hash mismatch"}`))
@@ -60,6 +67,7 @@ func HashMiddleware(next http.Handler, key string) http.Handler {
 		recorder := &responseRecorder{
 			ResponseWriter: w,
 			body:           &bytes.Buffer{},
+			statusCode:     http.StatusOK,
 		}
 
 		next.ServeHTTP(recorder, r)
@@ -71,9 +79,11 @@ func HashMiddleware(next http.Handler, key string) http.Handler {
 
 		w.Header().Set("HashSHA256", respHash)
 
-		if !recorder.wroteHeader {
-			w.WriteHeader(http.StatusOK)
+		finalStatus := recorder.statusCode
+		if finalStatus == 0 {
+			finalStatus = http.StatusOK
 		}
+		w.WriteHeader(finalStatus)
 		w.Write(recorder.body.Bytes())
 	})
 }
