@@ -3,6 +3,8 @@ package sender
 import (
 	"bytes"
 	"compress/gzip"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,22 +20,31 @@ import (
 
 type Sender struct {
 	serverURL string
+	hashKey   string
 	client    *http.Client
 }
 
-func NewSender(serverURL string) *Sender {
+func NewSender(serverURL string, hashKey string) *Sender {
 	client := &http.Client{
 		Transport: &GzipTransport{Transport: http.DefaultTransport},
 		Timeout:   10 * time.Second,
 	}
 	return &Sender{
 		serverURL: serverURL,
+		hashKey:   hashKey,
 		client:    client,
 	}
 }
 
 type GzipTransport struct {
 	Transport http.RoundTripper
+}
+
+func calculateHashBody(body []byte, key string) string {
+	h := sha256.New()
+	h.Write(body)
+	h.Write([]byte(key))
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 func (g *GzipTransport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -97,6 +108,10 @@ func (s *Sender) Send(metrics []*collector.Metric) error {
 		}
 		req.Header.Set("Content-Type", "text/plain")
 
+		if s.hashKey != "" {
+			req.Header.Set("HashSHA256", calculateHashBody([]byte{}, s.hashKey))
+		}
+
 		resp, err := s.client.Do(req)
 		if err != nil {
 			return fmt.Errorf("failed to send metric %s: %w", metric.Name, err)
@@ -131,6 +146,11 @@ func (s *Sender) SendJSON(metrics []*collector.Metric) error {
 			return fmt.Errorf("Failed to marshal metric %s: %w", metric.Name, err)
 
 		}
+		var hash string
+
+		if s.hashKey != "" {
+			hash = calculateHashBody(jsonBytes, s.hashKey)
+		}
 
 		err = pkg.DoWithRetry(func() error {
 			req, err := http.NewRequest(http.MethodPost, s.serverURL+"/update", bytes.NewReader(jsonBytes))
@@ -138,6 +158,10 @@ func (s *Sender) SendJSON(metrics []*collector.Metric) error {
 				return fmt.Errorf("failed to create request for %s: %w", metric.Name, err)
 			}
 			req.Header.Set("Content-Type", "application/json")
+
+			if hash != "" {
+				req.Header.Set("HashSHA256", hash)
+			}
 
 			resp, err := s.client.Do(req)
 			if err != nil {
@@ -197,6 +221,11 @@ func (s *Sender) SendBatch(metrics []*collector.Metric) error {
 		return fmt.Errorf("Failed to marshal metric to batch: %w", err)
 
 	}
+	var hash string
+
+	if s.hashKey != "" {
+		hash = calculateHashBody(jsonBytes, s.hashKey)
+	}
 
 	return pkg.DoWithRetry(func() error {
 		req, err := http.NewRequest(http.MethodPost, s.serverURL+"/updates", bytes.NewReader(jsonBytes))
@@ -204,6 +233,9 @@ func (s *Sender) SendBatch(metrics []*collector.Metric) error {
 			return err
 		}
 		req.Header.Set("Content-Type", "application/json")
+		if hash != "" {
+			req.Header.Set("HashSHA256", hash)
+		}
 
 		resp, err := s.client.Do(req)
 		if err != nil {

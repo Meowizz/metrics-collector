@@ -1,6 +1,8 @@
 package sender
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -9,6 +11,13 @@ import (
 	"github.com/Meowizz/metrics-collector/internal/collector"
 )
 
+func getExpectedHash(body []byte, key string) string {
+	h := sha256.New()
+	h.Write(body)
+	h.Write([]byte(key))
+	return hex.EncodeToString(h.Sum(nil))
+}
+
 func TestSender_Send(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -16,15 +25,27 @@ func TestSender_Send(t *testing.T) {
 		serverResp  int
 		wantErr     bool
 		wantURLPart string
+		hashKey     string
 	}{
 		{
-			name: "Send gauge metric successfully",
+			name: "Send gauge metric successfully without key",
 			metrics: []*collector.Metric{
 				{Type: collector.Gauge, Name: "Alloc", Value: float64(123.45)},
 			},
 			serverResp:  http.StatusOK,
 			wantErr:     false,
 			wantURLPart: "/update/gauge/Alloc/123.45",
+			hashKey:     "",
+		},
+		{
+			name: "Send gauge metric successfully WITH key",
+			metrics: []*collector.Metric{
+				{Type: collector.Gauge, Name: "Alloc", Value: float64(123.45)},
+			},
+			serverResp:  http.StatusOK,
+			wantErr:     false,
+			wantURLPart: "/update/gauge/Alloc/123.45",
+			hashKey:     "super-secret-key",
 		},
 		{
 			name: "Send counter metric successfully",
@@ -34,6 +55,7 @@ func TestSender_Send(t *testing.T) {
 			serverResp:  http.StatusOK,
 			wantErr:     false,
 			wantURLPart: "/update/counter/PollCount/42",
+			hashKey:     "",
 		},
 		{
 			name: "Send multiple metrics",
@@ -44,12 +66,14 @@ func TestSender_Send(t *testing.T) {
 			},
 			serverResp: http.StatusOK,
 			wantErr:    false,
+			hashKey:    "",
 		},
 		{
 			name:       "Send empty metrics list",
 			metrics:    []*collector.Metric{},
 			serverResp: http.StatusOK,
 			wantErr:    false,
+			hashKey:    "",
 		},
 		{
 			name: "Unknown metric value type",
@@ -58,6 +82,7 @@ func TestSender_Send(t *testing.T) {
 			},
 			serverResp: http.StatusOK,
 			wantErr:    true,
+			hashKey:    "",
 		},
 		{
 			name: "Server returns error status",
@@ -66,6 +91,7 @@ func TestSender_Send(t *testing.T) {
 			},
 			serverResp: http.StatusInternalServerError,
 			wantErr:    true,
+			hashKey:    "",
 		},
 		{
 			name: "Server returns bad request",
@@ -74,18 +100,29 @@ func TestSender_Send(t *testing.T) {
 			},
 			serverResp: http.StatusBadRequest,
 			wantErr:    true,
+			hashKey:    "",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
 				if r.Method != http.MethodPost {
 					t.Errorf("Expected POST, got %s", r.Method)
 				}
 				if r.Header.Get("Content-Type") != "text/plain" {
 					t.Errorf("Expected Content-Type text/plain, got %s", r.Header.Get("Content-Type"))
+				}
+
+				if tt.hashKey != "" {
+					expectedHash := getExpectedHash([]byte{}, tt.hashKey)
+					if r.Header.Get("HashSHA256") != expectedHash {
+						t.Errorf("Expected HashSHA256 %s, got %s", expectedHash, r.Header.Get("HashSHA256"))
+					}
+				} else {
+					if r.Header.Get("HashSHA256") != "" {
+						t.Errorf("Expected no HashSHA256 header, got %s", r.Header.Get("HashSHA256"))
+					}
 				}
 
 				if tt.wantURLPart != "" && !strings.Contains(r.URL.Path, tt.wantURLPart) {
@@ -96,7 +133,7 @@ func TestSender_Send(t *testing.T) {
 			}))
 			defer server.Close()
 
-			s := NewSender(server.URL)
+			s := NewSender(server.URL, tt.hashKey)
 
 			err := s.Send(tt.metrics)
 
@@ -116,7 +153,7 @@ func TestSender_Send_URLFormat(t *testing.T) {
 	}))
 	defer server.Close()
 
-	s := NewSender(server.URL)
+	s := NewSender(server.URL, "")
 
 	metrics := []*collector.Metric{
 		{Type: collector.Gauge, Name: "Alloc", Value: float64(1234.567)},
@@ -144,7 +181,7 @@ func TestSender_Send_Headers(t *testing.T) {
 	}))
 	defer server.Close()
 
-	s := NewSender(server.URL)
+	s := NewSender(server.URL, "")
 
 	metrics := []*collector.Metric{
 		{Type: collector.Gauge, Name: "Test", Value: float64(1.0)},
@@ -172,7 +209,7 @@ func TestSender_Send_ValueFormatting(t *testing.T) {
 	}))
 	defer server.Close()
 
-	s := NewSender(server.URL)
+	s := NewSender(server.URL, "")
 
 	metrics := []*collector.Metric{
 		{Type: collector.Gauge, Name: "Test", Value: float64(123.456)},

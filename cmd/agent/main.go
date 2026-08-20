@@ -18,7 +18,7 @@ func main() {
 	cfg := ParseFlag()
 	c := collector.NewCollector()
 	address := "http://" + cfg.Addr
-	s := sender.NewSender(address)
+	s := sender.NewSender(address, cfg.Key)
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)

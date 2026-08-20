@@ -12,6 +12,7 @@ type Config struct {
 	ReportInterval int
 	PollInterval   int
 	BatchSize      int
+	Key            string
 }
 
 func ParseFlag() *Config {
@@ -25,6 +26,7 @@ func ParseFlag() *Config {
 	flag.IntVar(&cfg.ReportInterval, "r", cfg.ReportInterval, "report interval in seconds")
 	flag.IntVar(&cfg.PollInterval, "p", cfg.PollInterval, "poll interval in seconds")
 	flag.IntVar(&cfg.BatchSize, "b", 0, "batch size for sending metrics (0 = disabled)")
+	flag.StringVar(&cfg.Key, "k", cfg.Key, "super secret key")
 
 	flag.Parse()
 
@@ -54,6 +56,10 @@ func ParseFlag() *Config {
 			log.Fatal("Unkonwn parametr in env:BATCH_SIZE")
 		}
 		cfg.BatchSize = BatchSize
+	}
+
+	if envKey := os.Getenv("KEY"); envKey != "" {
+		cfg.Key = envKey
 	}
 	return cfg
 }
