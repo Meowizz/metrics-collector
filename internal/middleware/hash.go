@@ -51,7 +51,9 @@ func HashMiddleware(next http.Handler, key string) http.Handler {
 		expectedHash := hex.EncodeToString(h.Sum(nil))
 
 		if r.Header.Get("HashSHA256") != expectedHash {
-			http.Error(w, "Bad Request: hash mismatch", http.StatusBadRequest)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(`{"error": "hash mismatch"}`))
 			return
 		}
 
