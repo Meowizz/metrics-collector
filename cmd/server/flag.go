@@ -25,9 +25,9 @@ func ParseFlag() *ConfigAddr {
 	}
 
 	var (
-	flagAddr, flagLogLevel, flagFileStoragePath, flagDatabaseDSN, flagKey string
-	flagStoreInterval int
-	flagRestore bool
+		flagAddr, flagLogLevel, flagFileStoragePath, flagDatabaseDSN, flagKey string
+		flagStoreInterval                                                     int
+		flagRestore                                                           bool
 	)
 
 	flag.StringVar(&flagAddr, "a", "", "Net address host:port")
@@ -65,8 +65,5 @@ func ParseFlag() *ConfigAddr {
 		cfg.Key = flagKey
 	}
 
-	if err := env.Parse(cfg); err != nil {
-		log.Fatalf("Error parsing environment variables: %v", err)
-	}
 	return cfg
 }
