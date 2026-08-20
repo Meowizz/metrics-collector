@@ -85,18 +85,20 @@ func main() {
 		}
 	}
 	r := chi.NewRouter()
-
+	hashMW := func(next http.Handler) http.Handler {
+		return appMiddleware.HashMiddleware(next, cfg.Key)
+	}
 	r.Use(middleware.Recoverer)
 	r.Use(logger.WithLogging)
 
-	r.With(appMiddleware.GzipMiddleware).Get("/", handler.MainPage)
-	r.Post("/update/{type}/{name}/{value}", handler.UpdatePage)
-	r.Get("/value/{type}/{name}", handler.GetMetricValue)
-	r.With(appMiddleware.GzipMiddleware).Post("/update", handler.UpdateMetricJSON)
-	r.With(appMiddleware.GzipMiddleware).Post("/value", handler.ValueMetricJSON)
-	r.With(appMiddleware.GzipMiddleware).Post("/update/", handler.UpdateMetricJSON)
-	r.With(appMiddleware.GzipMiddleware).Post("/value/", handler.ValueMetricJSON)
-	r.With(appMiddleware.GzipMiddleware).Post("/updates/", handler.UpdatesHandler)
+	r.With(appMiddleware.GzipMiddleware, hashMW).Get("/", handler.MainPage)
+	r.With(hashMW).Post("/update/{type}/{name}/{value}", handler.UpdatePage)
+	r.With(hashMW).Get("/value/{type}/{name}", handler.GetMetricValue)
+	r.With(appMiddleware.GzipMiddleware, hashMW).Post("/update", handler.UpdateMetricJSON)
+	r.With(appMiddleware.GzipMiddleware, hashMW).Post("/value", handler.ValueMetricJSON)
+	r.With(appMiddleware.GzipMiddleware, hashMW).Post("/update/", handler.UpdateMetricJSON)
+	r.With(appMiddleware.GzipMiddleware, hashMW).Post("/value/", handler.ValueMetricJSON)
+	r.With(appMiddleware.GzipMiddleware, hashMW).Post("/updates/", handler.UpdatesHandler)
 	r.Get("/ping", handler.Ping)
 
 	logger.Log.Info("Starting server", zap.String("address", cfg.Addr))

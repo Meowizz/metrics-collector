@@ -14,6 +14,7 @@ type ConfigAddr struct {
 	FileStoragePath string `env:"FILE_STORAGE_PATH" envDefault:"./home/storage.json"`
 	Restore         bool   `env:"RESTORE" envDefault:"false"`
 	DatabaseDSN     string `env:"DATABASE_DSN" envDefaut:""`
+	Key             string `env:"KEY" envDefault:""`
 }
 
 func ParseFlag() *ConfigAddr {
@@ -23,11 +24,11 @@ func ParseFlag() *ConfigAddr {
 		log.Fatalf("Error parsing environment variables: %v", err)
 	}
 
-	var flagAddr, flagLogLevel string
-	var flagStoreInterval int
-	var flagFileStoragePath string
-	var flagRestore bool
-	var flagDatabaseDSN string
+	var (
+	flagAddr, flagLogLevel, flagFileStoragePath, flagDatabaseDSN, flagKey string
+	flagStoreInterval int
+	flagRestore bool
+	)
 
 	flag.StringVar(&flagAddr, "a", "", "Net address host:port")
 	flag.StringVar(&flagLogLevel, "l", "", "Log level")
@@ -35,6 +36,7 @@ func ParseFlag() *ConfigAddr {
 	flag.StringVar(&flagFileStoragePath, "f", "", "The -f flag and the FILE_STORAGE_PATH environment variable are the path to the file where the current value is stored.")
 	flag.BoolVar(&flagRestore, "r", false, "The -r flag and the RESTORE environment variable are a Boolean value (true/false) that determines whether previously saved values ​​should be loaded from the specified file when the server starts.")
 	flag.StringVar(&flagDatabaseDSN, "d", "", "Database connection setting")
+	flag.StringVar(&flagKey, "k", "", "Super Secret Key")
 
 	flag.Parse()
 
@@ -57,6 +59,10 @@ func ParseFlag() *ConfigAddr {
 
 	if flagDatabaseDSN != "" {
 		cfg.DatabaseDSN = flagDatabaseDSN
+	}
+
+	if flagKey != "" {
+		cfg.Key = flagKey
 	}
 	return cfg
 }
