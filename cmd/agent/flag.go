@@ -5,12 +5,15 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
 	Addr           string
 	ReportInterval int
 	PollInterval   int
+	BatchSize      int
+	Key            string
 }
 
 func ParseFlag() *Config {
@@ -18,10 +21,13 @@ func ParseFlag() *Config {
 		Addr:           "localhost:8080",
 		ReportInterval: 10,
 		PollInterval:   2,
+		BatchSize:      50,
 	}
 	flag.StringVar(&cfg.Addr, "a", cfg.Addr, "Net address host:port")
 	flag.IntVar(&cfg.ReportInterval, "r", cfg.ReportInterval, "report interval in seconds")
 	flag.IntVar(&cfg.PollInterval, "p", cfg.PollInterval, "poll interval in seconds")
+	flag.IntVar(&cfg.BatchSize, "b", 0, "batch size for sending metrics (0 = disabled)")
+	flag.StringVar(&cfg.Key, "k", cfg.Key, "super secret key")
 
 	flag.Parse()
 
@@ -43,6 +49,28 @@ func ParseFlag() *Config {
 			log.Fatal("Unkonwn parametr in env:POLL_INTERVAL")
 		}
 		cfg.PollInterval = pollInterval
+	}
+
+	if envBatchSize := os.Getenv("BATCH_SIZE"); envBatchSize != "" {
+		BatchSize, err := strconv.Atoi(envBatchSize)
+		if err != nil {
+			log.Fatal("Unkonwn parametr in env:BATCH_SIZE")
+		}
+		cfg.BatchSize = BatchSize
+	}
+
+	if envKey := os.Getenv("KEY"); envKey != "" {
+		cfg.Key = envKey
+	}
+	cfg.Key = strings.TrimSpace(cfg.Key)
+
+	if strings.HasPrefix(cfg.Key, "@") {
+		filePath := strings.TrimSpace(strings.TrimPrefix(cfg.Key, "@"))
+		keyBytes, err := os.ReadFile(filePath)
+		if err != nil {
+			log.Fatalf("Error read key from file %s: %v", filePath, err)
+		}
+		cfg.Key = strings.TrimSpace(string(keyBytes))
 	}
 
 	return cfg

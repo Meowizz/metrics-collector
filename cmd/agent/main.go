@@ -3,8 +3,13 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 	"time"
 
+	"github.com/Meowizz/metrics-collector/internal/agent"
 	"github.com/Meowizz/metrics-collector/internal/collector"
 	"github.com/Meowizz/metrics-collector/internal/sender"
 )
@@ -13,32 +18,104 @@ func main() {
 	cfg := ParseFlag()
 	c := collector.NewCollector()
 	address := "http://" + cfg.Addr
-	s := sender.NewSender(address)
+	s := sender.NewSender(address, cfg.Key)
 
-	c.Collect()
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+
+	wg.Add(1)
 	go func() {
-		for {
-			c.Collect()
-			fmt.Println("Метрики собраны")
-			time.Sleep(time.Duration(cfg.PollInterval) * time.Second)
-		}
-	}()
+		defer wg.Done()
+		ticker := time.NewTicker(time.Duration(cfg.PollInterval) * time.Second)
+		defer ticker.Stop()
 
-	go func() {
+		c.Collect()
+		fmt.Println("Метрики собраны")
+
 		for {
-			metrics := c.GetMetrics()
-			fmt.Printf("Отправляем %d метрик...\n", len(metrics))
-			err := s.SendJSON(metrics)
-			if err != nil {
-				log.Printf("Failed to send metrics:%v", err)
-			} else {
-				fmt.Println("Метрики отправлены")
+			select {
+			case <-stop:
+				return
+			case <-ticker.C:
+				c.Collect()
+				fmt.Println("Метрики собраны")
 			}
-			time.Sleep(time.Duration(cfg.ReportInterval) * time.Second)
 		}
 	}()
 
-	select {}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if cfg.BatchSize > 0 {
+
+			fmt.Printf("Запущен режим батчей (размер: %d, интервал: %dс)\n", cfg.BatchSize, cfg.ReportInterval)
+
+			batchSender := agent.NewBatchSender(s, cfg.BatchSize, time.Duration(cfg.ReportInterval)*time.Second)
+			defer batchSender.FlushAndStop()
+
+			ticker := time.NewTicker(time.Duration(cfg.ReportInterval) * time.Second)
+			defer ticker.Stop()
+
+			for {
+				select {
+				case <-stop:
+					return
+				case <-ticker.C:
+					metrics := c.GetMetrics()
+					if len(metrics) > 0 {
+						fmt.Printf("Добавляем %d метрик в батч...\n", len(metrics))
+						batchSender.Add(metrics)
+					}
+				}
+			}
+		} else {
+
+			fmt.Println("Запущен классический режим отправки (SendJSON)")
+
+			ticker := time.NewTicker(time.Duration(cfg.ReportInterval) * time.Second)
+			defer ticker.Stop()
+
+			for {
+				select {
+				case <-stop:
+					return
+				case <-ticker.C:
+					metrics := c.GetMetrics()
+					if len(metrics) > 0 {
+						fmt.Printf("Отправляем %d метрик...\n", len(metrics))
+						err := s.SendJSON(metrics)
+						if err != nil {
+							log.Printf("Failed to send metrics: %v", err)
+						} else {
+							fmt.Println("Метрики успешно отправлены")
+						}
+					}
+				}
+			}
+		}
+	}()
+
+	<-quit
+	fmt.Println("\n Получен сигнал завершения. Корректная остановка агента..")
+
+	close(stop)
+
+	done := make(chan struct{})
+
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		fmt.Println("Агент остановлен.")
+	case <-time.After(30 * time.Second):
+		fmt.Println("Таймаут при остановке агента (30с). Принудительный выход.")
+
+	}
 
 }

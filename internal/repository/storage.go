@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"sync"
+
+	models "github.com/Meowizz/metrics-collector/internal/model"
 )
 
 type MemStorage struct {
@@ -23,6 +25,8 @@ type Storage interface {
 	UpdateCounter(name string, value int64) error
 	GetGauge(name string) (float64, bool)
 	GetCounter(name string) (int64, bool)
+	Ping() error
+	UpdateBatch(metrics []models.Metrics) error
 }
 
 func NewMemStorage() *MemStorage {
@@ -117,5 +121,29 @@ func (m *MemStorage) SaveToFile(filepath string) error {
 	if err := json.NewEncoder(file).Encode(state); err != nil {
 		return fmt.Errorf("Failed to encode metric %w", err)
 	}
+	return nil
+}
+
+func (m *MemStorage) Ping() error {
+	return nil
+}
+
+func (m *MemStorage) UpdateBatch(metrics []models.Metrics) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, metric := range metrics {
+		switch metric.MType {
+		case models.Gauge:
+			if metric.Value != nil {
+				m.gauge[metric.ID] = *metric.Value
+			}
+		case models.Counter:
+			if metric.Delta != nil {
+				m.counter[metric.ID] += *metric.Delta
+			}
+		}
+	}
+
 	return nil
 }
