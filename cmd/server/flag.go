@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"log"
+	"os"
 	"strings"
 
 	"github.com/caarlos0/env/v6"
@@ -62,8 +63,14 @@ func ParseFlag() *ConfigAddr {
 		cfg.DatabaseDSN = flagDatabaseDSN
 	}
 
-	if flagKey != "" {
-		cfg.Key = strings.TrimSpace(flagKey)
+	cfg.Key = strings.TrimSpace(cfg.Key)
+	if strings.HasPrefix(cfg.Key, "@") {
+		filePath := strings.TrimPrefix(cfg.Key, "@")
+		keyBytes, err := os.ReadFile(filePath)
+		if err != nil {
+			log.Fatalf("Не удалось прочитать файл ключа %s: %v", filePath, err)
+		}
+		cfg.Key = strings.TrimSpace(string(keyBytes))
 	}
 
 	return cfg

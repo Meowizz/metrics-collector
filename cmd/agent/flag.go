@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
@@ -61,5 +62,16 @@ func ParseFlag() *Config {
 	if envKey := os.Getenv("KEY"); envKey != "" {
 		cfg.Key = envKey
 	}
+	cfg.Key = strings.TrimSpace(cfg.Key)
+
+	if strings.HasPrefix(cfg.Key, "@") {
+		filePath := strings.TrimSpace(strings.TrimPrefix(cfg.Key, "@"))
+		keyBytes, err := os.ReadFile(filePath)
+		if err != nil {
+			log.Fatalf("Error read key from file %s: %v", filePath, err)
+		}
+		cfg.Key = strings.TrimSpace(string(keyBytes))
+	}
+
 	return cfg
 }
