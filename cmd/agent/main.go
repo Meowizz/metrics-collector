@@ -37,7 +37,7 @@ func main() {
 		defer ticker.Stop()
 
 		c.Collect()
-		//TODO GOPSUTIL
+		c.CollectGopsutil()
 		fmt.Println("Метрики собраны")
 
 		for {
@@ -46,7 +46,7 @@ func main() {
 				return
 			case <-ticker.C:
 				c.Collect()
-				//TODO GOPSUTIL
+				c.CollectGopsutil()
 				fmt.Println("Метрики собраны")
 			}
 		}

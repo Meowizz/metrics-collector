@@ -5,6 +5,9 @@ import (
 	"runtime"
 	"sync"
 	"time"
+
+	"github.com/shirou/gopsutil/v4/cpu"
+	"github.com/shirou/gopsutil/v4/mem"
 )
 
 type metricType string
@@ -76,6 +79,27 @@ func (c *Collector) Collect() {
 		existing.Value = currentValue + 1
 	} else {
 		c.metrics["PollCount"] = &Metric{Type: Counter, Name: "PollCount", Value: int64(1)}
+	}
+}
+
+func (c *Collector) CollectGopsutil() {
+	vMem, _ := mem.VirtualMemory()
+	cpuCounts, _ := cpu.Counts(true)
+	cpuPercents, _ := cpu.Percent(0, true)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.metrics["TotalMemory"] = &Metric{Type: Gauge, Name: "TotalMemory", Value: float64(vMem.Total)}
+	c.metrics["FreeMemory"] = &Metric{Type: Gauge, Name: "FreeMemory", Value: float64(vMem.Free)}
+
+	for i := 0; i < cpuCounts; i++ {
+		name := "CPUutilization" + string(rune('1'+i))
+		val := 0.0
+		if i < len(cpuPercents) {
+			val = cpuPercents[i]
+		}
+		c.metrics[name] = &Metric{Type: "gauge", Name: name, Value: val}
 	}
 }
 
