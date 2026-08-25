@@ -36,7 +36,6 @@ func NewSender(serverURL string, hashKey string) *Sender {
 		client:    client,
 	}
 }
-
 type GzipTransport struct {
 	Transport http.RoundTripper
 }

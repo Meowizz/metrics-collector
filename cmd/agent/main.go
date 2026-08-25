@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"sync"
@@ -17,14 +16,19 @@ import (
 func main() {
 	cfg := ParseFlag()
 	c := collector.NewCollector()
+
 	address := "http://" + cfg.Addr
 	s := sender.NewSender(address, cfg.Key)
+
+	wp := agent.NewWorkerPool(s, cfg.RateLimiter)
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
 	stop := make(chan struct{})
 	var wg sync.WaitGroup
+
+	wp.StartWorkingPool(&wg)
 
 	wg.Add(1)
 	go func() {
@@ -33,6 +37,7 @@ func main() {
 		defer ticker.Stop()
 
 		c.Collect()
+		//TODO GOPSUTIL
 		fmt.Println("Метрики собраны")
 
 		for {
@@ -41,6 +46,7 @@ func main() {
 				return
 			case <-ticker.C:
 				c.Collect()
+				//TODO GOPSUTIL
 				fmt.Println("Метрики собраны")
 			}
 		}
@@ -48,50 +54,27 @@ func main() {
 
 	wg.Add(1)
 	go func() {
-		defer wg.Done()
-		if cfg.BatchSize > 0 {
+		ticker := time.NewTicker(time.Duration(cfg.ReportInterval) * time.Second)
+		defer ticker.Stop()
 
-			fmt.Printf("Запущен режим батчей (размер: %d, интервал: %dс)\n", cfg.BatchSize, cfg.ReportInterval)
-
-			batchSender := agent.NewBatchSender(s, cfg.BatchSize, time.Duration(cfg.ReportInterval)*time.Second)
-			defer batchSender.FlushAndStop()
-
-			ticker := time.NewTicker(time.Duration(cfg.ReportInterval) * time.Second)
-			defer ticker.Stop()
-
-			for {
-				select {
-				case <-stop:
-					return
-				case <-ticker.C:
-					metrics := c.GetMetrics()
-					if len(metrics) > 0 {
-						fmt.Printf("Добавляем %d метрик в батч...\n", len(metrics))
-						batchSender.Add(metrics)
-					}
-				}
-			}
-		} else {
-
-			fmt.Println("Запущен классический режим отправки (SendJSON)")
-
-			ticker := time.NewTicker(time.Duration(cfg.ReportInterval) * time.Second)
-			defer ticker.Stop()
-
-			for {
-				select {
-				case <-stop:
-					return
-				case <-ticker.C:
-					metrics := c.GetMetrics()
-					if len(metrics) > 0 {
-						fmt.Printf("Отправляем %d метрик...\n", len(metrics))
-						err := s.SendJSON(metrics)
-						if err != nil {
-							log.Printf("Failed to send metrics: %v", err)
-						} else {
-							fmt.Println("Метрики успешно отправлены")
+		for {
+			select {
+			case <-stop:
+				return
+			case <-ticker.C:
+				metrics := c.GetMetrics()
+				if len(metrics) > 0 {
+					if cfg.BatchSize > 0 {
+						for i := 0; i < len(metrics); i += cfg.BatchSize {
+							end := i + cfg.BatchSize
+							if end > len(metrics) {
+								end = len(metrics)
+							}
+							chunk := metrics[i:end]
+							wp.Ingest(chunk)
 						}
+					} else {
+						wp.Ingest(metrics)
 					}
 				}
 			}
@@ -102,6 +85,10 @@ func main() {
 	fmt.Println("\n Получен сигнал завершения. Корректная остановка агента..")
 
 	close(stop)
+
+	time.Sleep(100 * time.Millisecond)
+
+	wp.Close()
 
 	done := make(chan struct{})
 

@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -10,11 +11,11 @@ import (
 )
 
 type BatchSender struct {
-	sender      *sender.Sender
-	buffer      []*collector.Metric
-	mu          sync.Mutex
+	sender       *sender.Sender
+	buffer       []*collector.Metric
+	mu           sync.Mutex
 	maxBatchSize int
-	ticker      *time.Ticker
+	ticker       *time.Ticker
 }
 
 func NewBatchSender(s *sender.Sender, maxBatchSize int, interval time.Duration) *BatchSender {
@@ -71,4 +72,44 @@ func (bs *BatchSender) FlushAndStop() {
 
 func (bs *BatchSender) Stop() {
 	bs.ticker.Stop()
+}
+
+type WorkerPool struct {
+	ingestChan chan []*collector.Metric
+	sender     *sender.Sender
+	workerCount int
+}
+
+func NewWorkerPool(s *sender.Sender, workerCount int) *WorkerPool {
+	return &WorkerPool{
+		ingestChan: make(chan []*collector.Metric, 20),
+		sender:     s,
+		workerCount: workerCount,
+	}
+}
+
+func (wp *WorkerPool) StartWorkingPool(wg *sync.WaitGroup) {
+	for i := 0; i <= wp.workerCount; i++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			for batch := range wp.ingestChan {
+				if len(batch)==0 {
+					continue
+				}
+				err := wp.sender.Send(batch)
+				if err != nil {
+					fmt.Printf("[Worker %d] Ошибка отправки: %v",workerID,err)
+				}
+			}
+		}(i)
+	}
+}
+
+func (wp *WorkerPool) Ingest (metrics []*collector.Metric){
+	wp.ingestChan <- metrics
+}
+
+func (wp *WorkerPool) Close(){
+	close(wp.ingestChan)
 }

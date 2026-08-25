@@ -81,8 +81,8 @@ func (c *Collector) Collect() {
 
 func (c *Collector) GetMetrics() []*Metric {
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 
 	result := make([]*Metric, 0, len(c.metrics))
 	for _, metric := range c.metrics {
