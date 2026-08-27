@@ -11,6 +11,7 @@ import (
 
 type responseRecorder struct {
 	http.ResponseWriter
+	header http.Header
 	body        *bytes.Buffer
 	wroteHeader bool
 	statusCode  int
@@ -29,6 +30,20 @@ func (r *responseRecorder) WriteHeader(statusCode int) {
 	}
 	r.wroteHeader = true
 	r.statusCode = statusCode
+
+	realHeader := r.ResponseWriter.Header()
+
+	for key, values := range r.header{
+		for _ , value := range values {
+			realHeader.Add(key,value)
+		}
+	}
+
+	r.ResponseWriter.WriteHeader(statusCode)
+}
+
+func (r *responseRecorder) Header() http.Header{
+	return r.header
 }
 
 func HashMiddleware(next http.Handler, key string) http.Handler {
@@ -50,8 +65,7 @@ func HashMiddleware(next http.Handler, key string) http.Handler {
 		clientHash := r.Header.Get("HashSHA256")
 
 		if clientHash == "" {
-			log.Printf("[SERVER] No HashSHA256 header, skipping check for %s", r.URL.Path)
-			next.ServeHTTP(w, r)
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
 			return
 		}
 
@@ -74,6 +88,7 @@ func HashMiddleware(next http.Handler, key string) http.Handler {
 			ResponseWriter: w,
 			body:           &bytes.Buffer{},
 			statusCode:     http.StatusOK,
+			header: make(http.Header),
 		}
 
 		next.ServeHTTP(recorder, r)

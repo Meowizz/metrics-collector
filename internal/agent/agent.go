@@ -78,6 +78,7 @@ type WorkerPool struct {
 	ingestChan chan []*collector.Metric
 	sender     *sender.Sender
 	workerCount int
+	wg sync.WaitGroup
 }
 
 func NewWorkerPool(s *sender.Sender, workerCount int) *WorkerPool {
@@ -88,11 +89,11 @@ func NewWorkerPool(s *sender.Sender, workerCount int) *WorkerPool {
 	}
 }
 
-func (wp *WorkerPool) StartWorkingPool(wg *sync.WaitGroup) {
-	for i := 0; i <= wp.workerCount; i++ {
-		wg.Add(1)
+func (wp *WorkerPool) StartWorkingPool() {
+	for i := 0; i < wp.workerCount; i++ {
+		wp.wg.Add(1)
 		go func(workerID int) {
-			defer wg.Done()
+			defer wp.wg.Done()
 			for batch := range wp.ingestChan {
 				if len(batch)==0 {
 					continue
@@ -112,4 +113,5 @@ func (wp *WorkerPool) Ingest (metrics []*collector.Metric){
 
 func (wp *WorkerPool) Close(){
 	close(wp.ingestChan)
+	wp.wg.Wait()
 }

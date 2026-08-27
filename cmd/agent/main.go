@@ -28,7 +28,7 @@ func main() {
 	stop := make(chan struct{})
 	var wg sync.WaitGroup
 
-	wp.StartWorkingPool(&wg)
+	wp.StartWorkingPool()
 
 	wg.Add(1)
 	go func() {
@@ -86,14 +86,11 @@ func main() {
 
 	close(stop)
 
-	time.Sleep(100 * time.Millisecond)
-
-	wp.Close()
-
 	done := make(chan struct{})
 
 	go func() {
 		wg.Wait()
+		wp.Close()
 		close(done)
 	}()
 

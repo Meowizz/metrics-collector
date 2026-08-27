@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -36,13 +35,12 @@ func NewSender(serverURL string, hashKey string) *Sender {
 		client:    client,
 	}
 }
+
 type GzipTransport struct {
 	Transport http.RoundTripper
 }
 
-func calculateHashBody(body []byte, key string) string {
-	log.Printf("[DEBUG AGENT] Hashing -> Body: %q (len: %d), Key: %q (len: %d)",
-	string(body), len(body), key, len(key))
+func computeHash(body []byte, key string) string {
 	h := sha256.New()
 	h.Write(body)
 	h.Write([]byte(key))
@@ -111,7 +109,7 @@ func (s *Sender) Send(metrics []*collector.Metric) error {
 		req.Header.Set("Content-Type", "text/plain")
 
 		if s.hashKey != "" {
-			req.Header.Set("HashSHA256", calculateHashBody([]byte{}, s.hashKey))
+			req.Header.Set("HashSHA256", computeHash([]byte{}, s.hashKey))
 		}
 
 		resp, err := s.client.Do(req)
@@ -151,7 +149,7 @@ func (s *Sender) SendJSON(metrics []*collector.Metric) error {
 		var hash string
 
 		if s.hashKey != "" {
-			hash = calculateHashBody(jsonBytes, s.hashKey)
+			hash = computeHash(jsonBytes, s.hashKey)
 		}
 
 		err = pkg.DoWithRetry(func() error {
@@ -226,7 +224,7 @@ func (s *Sender) SendBatch(metrics []*collector.Metric) error {
 	var hash string
 
 	if s.hashKey != "" {
-		hash = calculateHashBody(jsonBytes, s.hashKey)
+		hash = computeHash(jsonBytes, s.hashKey)
 	}
 
 	return pkg.DoWithRetry(func() error {

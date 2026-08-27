@@ -3,6 +3,7 @@ package collector
 import (
 	"math/rand"
 	"runtime"
+	"strconv"
 	"sync"
 	"time"
 
@@ -94,12 +95,12 @@ func (c *Collector) CollectGopsutil() {
 	c.metrics["FreeMemory"] = &Metric{Type: Gauge, Name: "FreeMemory", Value: float64(vMem.Free)}
 
 	for i := 0; i < cpuCounts; i++ {
-		name := "CPUutilization" + string(rune('1'+i))
+		name := "CPUutilization" + strconv.Itoa(i+1)
 		val := 0.0
 		if i < len(cpuPercents) {
 			val = cpuPercents[i]
 		}
-		c.metrics[name] = &Metric{Type: "gauge", Name: name, Value: val}
+		c.metrics[name] = &Metric{Type: Gauge, Name: name, Value: val}
 	}
 }
 

@@ -15,7 +15,7 @@ type ConfigAddr struct {
 	StoreInterval   int    `env:"STORE_INTERVAL" envDefault:"300"`
 	FileStoragePath string `env:"FILE_STORAGE_PATH" envDefault:"./home/storage.json"`
 	Restore         bool   `env:"RESTORE" envDefault:"false"`
-	DatabaseDSN     string `env:"DATABASE_DSN" envDefaut:""`
+	DatabaseDSN     string `env:"DATABASE_DSN" envDefault:""`
 	Key             string `env:"KEY" envDefault:""`
 }
 
