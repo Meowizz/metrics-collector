@@ -17,6 +17,8 @@ type ConfigAddr struct {
 	Restore         bool   `env:"RESTORE" envDefault:"false"`
 	DatabaseDSN     string `env:"DATABASE_DSN" envDefault:""`
 	Key             string `env:"KEY" envDefault:""`
+	AuditFile       string `env:"AUDIT_FILE" envDefault:""`
+	AuditURL        string `env:"AUDIT_URL" envDefault:""`
 }
 
 func ParseFlag() *ConfigAddr {
@@ -27,9 +29,9 @@ func ParseFlag() *ConfigAddr {
 	}
 
 	var (
-		flagAddr, flagLogLevel, flagFileStoragePath, flagDatabaseDSN, flagKey string
-		flagStoreInterval                                                     int
-		flagRestore                                                           bool
+		flagAddr, flagLogLevel, flagFileStoragePath, flagDatabaseDSN, flagKey, flagAuditFile, flagAuditURL string
+		flagStoreInterval                                                                                  int
+		flagRestore                                                                                        bool
 	)
 
 	flag.StringVar(&flagAddr, "a", "", "Net address host:port")
@@ -39,6 +41,8 @@ func ParseFlag() *ConfigAddr {
 	flag.BoolVar(&flagRestore, "r", false, "The -r flag and the RESTORE environment variable are a Boolean value (true/false) that determines whether previously saved values ​​should be loaded from the specified file when the server starts.")
 	flag.StringVar(&flagDatabaseDSN, "d", "", "Database connection setting")
 	flag.StringVar(&flagKey, "k", "", "Super Secret Key")
+	flag.StringVar(&flagAuditFile, "audit-file", "", "Audit name file")
+	flag.StringVar(&flagAuditURL, "audit-url", "", "URL for audit")
 
 	flag.Parse()
 
@@ -71,6 +75,14 @@ func ParseFlag() *ConfigAddr {
 			log.Fatalf("Не удалось прочитать файл ключа %s: %v", filePath, err)
 		}
 		cfg.Key = strings.TrimSpace(string(keyBytes))
+	}
+
+	if flagAuditFile != "" {
+		cfg.AuditFile = flagAuditFile
+	}
+
+	if flagAuditURL != "" {
+		cfg.AuditURL = flagAuditURL
 	}
 
 	return cfg
