@@ -44,7 +44,7 @@ func TestMetricsHandler_Ping(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockStore := &MockStorage{pingErr: tt.mockPingErr}
-			h := NewMetricsHandler(mockStore)
+			h := NewMetricsHandler(mockStore, nil)
 
 			req := httptest.NewRequest(http.MethodGet, "/ping", nil)
 			rr := httptest.NewRecorder()
@@ -59,9 +59,8 @@ func TestMetricsHandler_Ping(t *testing.T) {
 }
 
 func TestMetricsHandler_UpdateAndGet(t *testing.T) {
-
 	realStore := repository.NewMemStorage()
-	h := NewMetricsHandler(realStore)
+	h := NewMetricsHandler(realStore, nil)
 
 	r := chi.NewRouter()
 	h.RegisterRouters(r)
@@ -90,7 +89,8 @@ func TestMetricsHandler_UpdateAndGet(t *testing.T) {
 
 func TestMetricsHandler_UpdateMetricJSON(t *testing.T) {
 	realStore := repository.NewMemStorage()
-	h := NewMetricsHandler(realStore)
+	h := NewMetricsHandler(realStore, nil)
+
 	r := chi.NewRouter()
 	h.RegisterRouters(r)
 
@@ -112,10 +112,10 @@ func TestMetricsHandler_UpdateMetricJSON(t *testing.T) {
 		t.Errorf("Expected counter 'MyCounter' to be 10 in storage, got %v, exists: %v", val, ok)
 	}
 }
-func TestMetricsHandler_UpdatesHandler(t *testing.T) {
 
+func TestMetricsHandler_UpdatesHandler(t *testing.T) {
 	realStore := repository.NewMemStorage()
-	h := NewMetricsHandler(realStore)
+	h := NewMetricsHandler(realStore, nil)
 
 	r := chi.NewRouter()
 	r.Post("/updates", h.UpdatesHandler)
