@@ -97,7 +97,7 @@ func (s *Sender) Send(metrics []*collector.Metric) error {
 		case int64:
 			valueStr = fmt.Sprintf("%d", v)
 		default:
-			return fmt.Errorf("Unkown matric value type: %T", v)
+			return fmt.Errorf("unkown matric value type: %T", v)
 		}
 
 		url := fmt.Sprintf("%s/update/%s/%s/%s", s.serverURL, metric.Type, metric.Name, valueStr)
@@ -138,12 +138,12 @@ func (s *Sender) SendJSON(metrics []*collector.Metric) error {
 		case int64:
 			reqMetric.Delta = &v
 		default:
-			return fmt.Errorf("Unknown metric type: %T", v)
+			return fmt.Errorf("unknown metric type: %T", v)
 		}
 
 		jsonBytes, err := json.Marshal(reqMetric)
 		if err != nil {
-			return fmt.Errorf("Failed to marshal metric %s: %w", metric.Name, err)
+			return fmt.Errorf("failed to marshal metric %s: %w", metric.Name, err)
 
 		}
 		var hash string
@@ -210,7 +210,7 @@ func (s *Sender) SendBatch(metrics []*collector.Metric) error {
 		case int64:
 			reqMetric.Delta = &v
 		default:
-			return fmt.Errorf("Unknown metric type: %T", v)
+			return fmt.Errorf("unknown metric type: %T", v)
 		}
 
 		apiMetrics = append(apiMetrics, reqMetric)
@@ -218,7 +218,7 @@ func (s *Sender) SendBatch(metrics []*collector.Metric) error {
 
 	jsonBytes, err := json.Marshal(apiMetrics)
 	if err != nil {
-		return fmt.Errorf("Failed to marshal metric to batch: %w", err)
+		return fmt.Errorf("failed to marshal metric to batch: %w", err)
 
 	}
 	var hash string

@@ -75,14 +75,14 @@ func (m *MemStorage) LoadFromFile(filepath string) error {
 		if os.IsNotExist(err) {
 			return nil
 		}
-		return fmt.Errorf("Failed to open file: %w", err)
+		return fmt.Errorf("failed to open file: %w", err)
 	}
 	defer file.Close()
 
 	var state SavedState
 
 	if err := json.NewDecoder(file).Decode(&state); err != nil {
-		return fmt.Errorf("Failed to decode metric: %w", err)
+		return fmt.Errorf("failed to decode metric: %w", err)
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -114,12 +114,12 @@ func (m *MemStorage) SaveToFile(filepath string) error {
 
 	file, err := os.Create(filepath)
 	if err != nil {
-		return fmt.Errorf("Failed to create file: %w", err)
+		return fmt.Errorf("failed to create file: %w", err)
 	}
 	defer file.Close()
 
 	if err := json.NewEncoder(file).Encode(state); err != nil {
-		return fmt.Errorf("Failed to encode metric %w", err)
+		return fmt.Errorf("failed to encode metric %w", err)
 	}
 	return nil
 }

@@ -44,7 +44,7 @@ func RunMigrations(dsn string, migrationPath string) error {
 	)
 
 	if err != nil {
-		return fmt.Errorf("Failed to create migrate instance: %w", err)
+		return fmt.Errorf("failed to create migrate instance: %w", err)
 	}
 
 	if err := m.Up(); err != nil {
@@ -54,7 +54,7 @@ func RunMigrations(dsn string, migrationPath string) error {
 		}
 		return fmt.Errorf("failed to run migrations: %w", err)
 	}
-	log.Println("Migrations applied successfully")
+	log.Println("migrations applied successfully")
 	return nil
 }
 
@@ -84,7 +84,7 @@ func (p *PostgresStorage) UpdateGauge(name string, value float64) error {
 		}
 		lastErr = err
 		if !isRetriablePgError(err) {
-			return fmt.Errorf("Non retriable database error:%w", err)
+			return fmt.Errorf("non retriable database error:%w", err)
 		}
 		if attempt < 3 {
 			time.Sleep(delays[attempt])
@@ -111,7 +111,7 @@ func (p *PostgresStorage) UpdateCounter(name string, value int64) error {
 		}
 		lastErr = err
 		if !isRetriablePgError(err) {
-			return fmt.Errorf("Non retriable database error:%w", err)
+			return fmt.Errorf("non retriable database error:%w", err)
 		}
 		if attempt < 3 {
 			time.Sleep(delays[attempt])
