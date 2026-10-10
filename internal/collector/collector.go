@@ -3,7 +3,12 @@ package collector
 import (
 	"math/rand"
 	"runtime"
+	"strconv"
+	"sync"
 	"time"
+
+	"github.com/shirou/gopsutil/v4/cpu"
+	"github.com/shirou/gopsutil/v4/mem"
 )
 
 type metricType string
@@ -20,6 +25,7 @@ type Metric struct {
 }
 
 type Collector struct {
+	mu      sync.RWMutex
 	metrics map[string]*Metric
 }
 
@@ -33,6 +39,9 @@ func NewCollector() *Collector {
 func (c *Collector) Collect() {
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	c.metrics["Alloc"] = &Metric{Type: Gauge, Name: "Alloc", Value: float64(memStats.Alloc)}
 	c.metrics["BuckHashSys"] = &Metric{Type: Gauge, Name: "BuckHashSys", Value: float64(memStats.BuckHashSys)}
@@ -74,7 +83,32 @@ func (c *Collector) Collect() {
 	}
 }
 
+func (c *Collector) CollectGopsutil() {
+	vMem, _ := mem.VirtualMemory()
+	cpuCounts, _ := cpu.Counts(true)
+	cpuPercents, _ := cpu.Percent(0, true)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.metrics["TotalMemory"] = &Metric{Type: Gauge, Name: "TotalMemory", Value: float64(vMem.Total)}
+	c.metrics["FreeMemory"] = &Metric{Type: Gauge, Name: "FreeMemory", Value: float64(vMem.Free)}
+
+	for i := 0; i < cpuCounts; i++ {
+		name := "CPUutilization" + strconv.Itoa(i+1)
+		val := 0.0
+		if i < len(cpuPercents) {
+			val = cpuPercents[i]
+		}
+		c.metrics[name] = &Metric{Type: Gauge, Name: name, Value: val}
+	}
+}
+
 func (c *Collector) GetMetrics() []*Metric {
+
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
 	result := make([]*Metric, 0, len(c.metrics))
 	for _, metric := range c.metrics {
 		result = append(result, metric)

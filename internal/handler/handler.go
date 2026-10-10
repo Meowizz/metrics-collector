@@ -206,10 +206,52 @@ func (m *MetricsHandler) ValueMetricJSON(rw http.ResponseWriter, rq *http.Reques
 
 }
 
+func (h *MetricsHandler) Ping(w http.ResponseWriter, r *http.Request) {
+	if err := h.storage.Ping(); err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func (h *MetricsHandler) UpdatesHandler(rw http.ResponseWriter, rq *http.Request) {
+
+	if rq.Method != http.MethodPost {
+		http.Error(rw, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if rq.Header.Get("Content-Type") != "application/json" {
+		http.Error(rw, "Invalid Content-Type", http.StatusBadRequest) // 400, не 405!
+		return
+	}
+
+	var metric []models.Metrics
+	if err := json.NewDecoder(rq.Body).Decode(&metric); err != nil {
+		http.Error(rw, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if len(metric) == 0 {
+		rw.Header().Set("Content-Type", "application/json")
+		rw.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if err := h.storage.UpdateBatch(metric); err != nil {
+		http.Error(rw, "Storage error", http.StatusInternalServerError)
+		return
+	}
+
+	rw.Header().Set("Content-Type", "application/json")
+	rw.WriteHeader(http.StatusOK)
+}
 func (m *MetricsHandler) RegisterRouters(r chi.Router) {
 	r.Get("/", m.MainPage)
 	r.Get("/value/{type}/{name}", m.GetMetricValue)
 	r.Post("/update/{type}/{name}/{value}", m.UpdatePage)
 	r.Post("/update", m.UpdateMetricJSON)
 	r.Post("/value", m.ValueMetricJSON)
+	r.Get("/ping", m.Ping)
+	r.Post("/updates/", m.UpdatesHandler)
 }

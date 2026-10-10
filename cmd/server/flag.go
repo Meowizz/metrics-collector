@@ -3,6 +3,8 @@ package main
 import (
 	"flag"
 	"log"
+	"os"
+	"strings"
 
 	"github.com/caarlos0/env/v6"
 )
@@ -13,6 +15,8 @@ type ConfigAddr struct {
 	StoreInterval   int    `env:"STORE_INTERVAL" envDefault:"300"`
 	FileStoragePath string `env:"FILE_STORAGE_PATH" envDefault:"./home/storage.json"`
 	Restore         bool   `env:"RESTORE" envDefault:"false"`
+	DatabaseDSN     string `env:"DATABASE_DSN" envDefault:""`
+	Key             string `env:"KEY" envDefault:""`
 }
 
 func ParseFlag() *ConfigAddr {
@@ -22,16 +26,19 @@ func ParseFlag() *ConfigAddr {
 		log.Fatalf("Error parsing environment variables: %v", err)
 	}
 
-	var flagAddr, flagLogLevel string
-	var flagStoreInterval int
-	var flagFileStoragePath string
-	var flagRestore bool
+	var (
+		flagAddr, flagLogLevel, flagFileStoragePath, flagDatabaseDSN, flagKey string
+		flagStoreInterval                                                     int
+		flagRestore                                                           bool
+	)
 
 	flag.StringVar(&flagAddr, "a", "", "Net address host:port")
 	flag.StringVar(&flagLogLevel, "l", "", "Log level")
 	flag.IntVar(&flagStoreInterval, "i", 0, "The -i flag and the STORE_INTERVAL environment variable are the time interval in seconds during which the server maintains a current connection to disk ")
 	flag.StringVar(&flagFileStoragePath, "f", "", "The -f flag and the FILE_STORAGE_PATH environment variable are the path to the file where the current value is stored.")
 	flag.BoolVar(&flagRestore, "r", false, "The -r flag and the RESTORE environment variable are a Boolean value (true/false) that determines whether previously saved values ​​should be loaded from the specified file when the server starts.")
+	flag.StringVar(&flagDatabaseDSN, "d", "", "Database connection setting")
+	flag.StringVar(&flagKey, "k", "", "Super Secret Key")
 
 	flag.Parse()
 
@@ -51,5 +58,20 @@ func ParseFlag() *ConfigAddr {
 	if flagRestore {
 		cfg.Restore = flagRestore
 	}
+
+	if flagDatabaseDSN != "" {
+		cfg.DatabaseDSN = flagDatabaseDSN
+	}
+
+	cfg.Key = strings.TrimSpace(cfg.Key)
+	if strings.HasPrefix(cfg.Key, "@") {
+		filePath := strings.TrimPrefix(cfg.Key, "@")
+		keyBytes, err := os.ReadFile(filePath)
+		if err != nil {
+			log.Fatalf("Не удалось прочитать файл ключа %s: %v", filePath, err)
+		}
+		cfg.Key = strings.TrimSpace(string(keyBytes))
+	}
+
 	return cfg
 }
