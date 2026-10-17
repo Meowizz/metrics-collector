@@ -17,10 +17,15 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
+// PostgresStorage — хранилище метрик в PostgreSQL с поддержкой повторных попыток
+// при сетевых ошибках.
 type PostgresStorage struct {
 	db *sql.DB
 }
 
+// NewPostgresStorage создаёт новое PostgreSQL хранилище, подключаясь к БД
+// по указанному DSN и выполняя ping для проверки доступности.
+// Возвращает указатель на инициализированный PostgresStorage или ошибку.
 func NewPostgresStorage(dsn string) (*PostgresStorage, error) {
 
 	db, err := sql.Open("pgx", dsn)
@@ -37,6 +42,8 @@ func NewPostgresStorage(dsn string) (*PostgresStorage, error) {
 	}, nil
 }
 
+// RunMigrations применяет миграции из указанной директории к базе данных по DSN.
+// Возвращает ошибку при неудачном применении миграций.
 func RunMigrations(dsn string, migrationPath string) error {
 	m, err := migrate.New(
 		"file://"+migrationPath,

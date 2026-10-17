@@ -46,6 +46,9 @@ func (r *responseRecorder) Header() http.Header {
 	return r.header
 }
 
+// HashMiddleware — middleware для проверки SHA256 хеша запроса и добавления
+// хеша в ответ. Проверяет заголовок HashSHA256 клиента и вычисляет ожидаемый хеш
+// из тела запроса и секретного ключа.
 func HashMiddleware(next http.Handler, key string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 

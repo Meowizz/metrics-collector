@@ -3,6 +3,7 @@ package sender
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -247,6 +248,171 @@ func generateTestMetrics(count int) []*collector.Metric {
 		}
 	}
 	return metrics
+}
+
+func TestSender_SendJSON(t *testing.T) {
+	tests := []struct {
+		name        string
+		metrics     []*collector.Metric
+		serverResp  int
+		wantErr     bool
+		hashKey     string
+	}{
+		{
+			name: "SendJSON gauge successfully",
+			metrics: []*collector.Metric{
+				{Type: collector.Gauge, Name: "Alloc", Value: float64(123.45)},
+			},
+			serverResp:  http.StatusOK,
+			wantErr:     false,
+			hashKey:     "",
+		},
+		{
+			name: "SendJSON counter successfully",
+			metrics: []*collector.Metric{
+				{Type: collector.Counter, Name: "PollCount", Value: int64(42)},
+			},
+			serverResp:  http.StatusOK,
+			wantErr:     false,
+			hashKey:     "",
+		},
+		{
+			name: "SendJSON unknown value type",
+			metrics: []*collector.Metric{
+				{Type: collector.Gauge, Name: "Test", Value: "string_value"},
+			},
+			serverResp: http.StatusOK,
+			wantErr:    true,
+			hashKey:    "",
+		},
+		{
+			name: "SendJSON server error",
+			metrics: []*collector.Metric{
+				{Type: collector.Gauge, Name: "Alloc", Value: float64(100.0)},
+			},
+			serverResp:  http.StatusInternalServerError,
+			wantErr:     true,
+			hashKey:     "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPost {
+					t.Errorf("Expected POST, got %s", r.Method)
+				}
+				if r.Header.Get("Content-Type") != "application/json" {
+					t.Errorf("Expected Content-Type application/json, got %s", r.Header.Get("Content-Type"))
+				}
+
+				if tt.hashKey != "" {
+					body, _ := io.ReadAll(r.Body)
+					expectedHash := getExpectedHash(body, tt.hashKey)
+					if r.Header.Get("HashSHA256") != expectedHash {
+						t.Errorf("Expected HashSHA256 %s, got %s", expectedHash, r.Header.Get("HashSHA256"))
+					}
+				}
+
+				w.WriteHeader(tt.serverResp)
+			}))
+			defer server.Close()
+
+			s := NewSender(server.URL, tt.hashKey)
+			err := s.SendJSON(tt.metrics)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Sender.SendJSON() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestSender_SendBatch(t *testing.T) {
+	tests := []struct {
+		name        string
+		metrics     []*collector.Metric
+		serverResp  int
+		wantErr     bool
+		hashKey     string
+	}{
+		{
+			name: "SendBatch multiple metrics successfully",
+			metrics: []*collector.Metric{
+				{Type: collector.Gauge, Name: "Gauge1", Value: float64(10.0)},
+				{Type: collector.Counter, Name: "Counter1", Value: int64(5)},
+				{Type: collector.Gauge, Name: "Gauge2", Value: float64(20.0)},
+			},
+			serverResp: http.StatusOK,
+			wantErr:    false,
+			hashKey:    "",
+		},
+		{
+			name:        "SendBatch empty metrics",
+			metrics:     []*collector.Metric{},
+			serverResp:  http.StatusOK,
+			wantErr:     false,
+			hashKey:     "",
+		},
+		{
+			name: "SendBatch unknown value type",
+			metrics: []*collector.Metric{
+				{Type: collector.Gauge, Name: "Test", Value: "bad_value"},
+			},
+			serverResp: http.StatusOK,
+			wantErr:    true,
+			hashKey:    "",
+		},
+		{
+			name: "SendBatch server error (500)",
+			metrics: []*collector.Metric{
+				{Type: collector.Gauge, Name: "Gauge1", Value: float64(10.0)},
+			},
+			serverResp:  http.StatusInternalServerError,
+			wantErr:     true,
+			hashKey:     "",
+		},
+		{
+			name: "SendBatch client error (400)",
+			metrics: []*collector.Metric{
+				{Type: collector.Gauge, Name: "Gauge1", Value: float64(10.0)},
+			},
+			serverResp:  http.StatusBadRequest,
+			wantErr:     true,
+			hashKey:     "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPost {
+					t.Errorf("Expected POST, got %s", r.Method)
+				}
+				if r.Header.Get("Content-Type") != "application/json" {
+					t.Errorf("Expected Content-Type application/json, got %s", r.Header.Get("Content-Type"))
+				}
+
+				if tt.hashKey != "" {
+					body, _ := io.ReadAll(r.Body)
+					expectedHash := getExpectedHash(body, tt.hashKey)
+					if r.Header.Get("HashSHA256") != expectedHash {
+						t.Errorf("Expected HashSHA256 %s, got %s", expectedHash, r.Header.Get("HashSHA256"))
+					}
+				}
+
+				w.WriteHeader(tt.serverResp)
+			}))
+			defer server.Close()
+
+			s := NewSender(server.URL, tt.hashKey)
+			err := s.SendBatch(tt.metrics)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Sender.SendBatch() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
 }
 
 func BenchmarkSender_Send(b *testing.B) {

@@ -9,17 +9,22 @@ import (
 	models "github.com/Meowizz/metrics-collector/internal/model"
 )
 
+// MemStorage — in-memory хранилище метрик с поддержкой gauge и counter.
+// Безопасен для использования из нескольких горутн благодаря sync.RWMutex.
 type MemStorage struct {
 	mu      sync.RWMutex
 	gauge   map[string]float64
 	counter map[string]int64
 }
 
+// SavedState представляет состояние метрик для сериализации в файл.
 type SavedState struct {
 	Counters map[string]int64   `json:"counters"`
 	Gauges   map[string]float64 `json:"gauges"`
 }
 
+// Storage — интерфейс хранилища метрик с операциями обновления и получения
+// gauge и counter, а также батч-операциями.
 type Storage interface {
 	UpdateGauge(name string, value float64) error
 	UpdateCounter(name string, value int64) error
@@ -29,6 +34,8 @@ type Storage interface {
 	UpdateBatch(metrics []models.Metrics) error
 }
 
+// NewMemStorage создаёт новое пустое in-memory хранилище метрик.
+// Возвращает указатель на инициализированный MemStorage.
 func NewMemStorage() *MemStorage {
 	return &MemStorage{
 		gauge:   make(map[string]float64),

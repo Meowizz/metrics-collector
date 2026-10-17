@@ -11,21 +11,27 @@ import (
 	"time"
 )
 
+// Event — событие аудита, фиксирующее изменения метрик.
 type Event struct {
 	TS      int      `json:"ts"`
 	Metrics []string `json:"metrics"`
 	IP      string   `json:"ip_address"`
 }
 
+// Observer — интерфейс наблюдателя для получения событий аудита.
 type Observer interface {
 	Update(event Event)
 }
 
+// Subject — реализация паттерна Observer для управления подписками
+// и уведомлениями наблюдателей о событиях аудита.
 type Subject struct {
 	observers []Observer
 	mu        sync.Mutex
 }
 
+// NewSubject создаёт новый пустой Subject для управления наблюдателями аудита.
+// Возвращает указатель на инициализированный Subject.
 func NewSubject() *Subject {
 	return &Subject{observers: make([]Observer, 0)}
 }
@@ -47,11 +53,16 @@ func (s *Subject) Notify(event Event) {
 	}
 }
 
+// FileAuditObserver — наблюдатель аудита, записывающий события в файл
+// в формате JSON (по одной записи на строку).
 type FileAuditObserver struct {
 	file *os.File
 	mu   sync.Mutex
 }
 
+// NewFileAuditObserver создаёт новый FileAuditObserver, открывая файл по указанному пути
+// в режиме дозаписи с созданием при отсутствии.
+// Возвращает указатель на инициализированный FileAuditObserver или ошибку.
 func NewFileAuditObserver(filePath string) (*FileAuditObserver, error) {
 	file, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -87,11 +98,16 @@ func (f *FileAuditObserver) Close() error {
 	return f.file.Close()
 }
 
+// HTTPAuditObserver — наблюдатель аудита, отправляющий события на удалённый HTTP-сервер
+// через POST-запрос в формате JSON.
 type HTTPAuditObserver struct {
 	client *http.Client
 	url    string
 }
 
+// NewHTTPObserver создаёт новый HTTPAuditObserver с указанным URL для отправки событий.
+// Время ожидания HTTP-клиента — 5 секунд.
+// Возвращает указатель на инициализированный HTTPAuditObserver.
 func NewHTTPObserver(host string) *HTTPAuditObserver {
 	return &HTTPAuditObserver{
 		client: &http.Client{

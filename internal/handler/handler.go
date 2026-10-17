@@ -16,11 +16,16 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+// MetricsHandler — HTTP-хендлер для приёма, хранения и получения метрик.
+// Поддерживает форматы text/plain, JSON и батч-обновления.
 type MetricsHandler struct {
 	storage repository.Storage
 	audit   *audit.Subject
 }
 
+// NewMetricsHandler создаёт новый MetricsHandler с указанным хранилищем
+// и опциональным субъектом аудита для уведомления об изменениях метрик.
+// Возвращает указатель на инициализированный MetricsHandler.
 func NewMetricsHandler(storage repository.Storage, auditSubject *audit.Subject) *MetricsHandler {
 	return &MetricsHandler{
 		storage: storage,

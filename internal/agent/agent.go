@@ -10,6 +10,8 @@ import (
 	"github.com/Meowizz/metrics-collector/internal/sender"
 )
 
+// BatchSender — буферизатор метрик, отправляющий их батчами при достижении
+// максимального размера или по таймеру.
 type BatchSender struct {
 	sender       *sender.Sender
 	buffer       []*collector.Metric
@@ -18,6 +20,9 @@ type BatchSender struct {
 	ticker       *time.Ticker
 }
 
+// NewBatchSender создаёт новый BatchSender с указанным отправителем,
+// максимальным размером батча и интервалом таймера для периодической отправки.
+// Возвращает указатель на инициализированный BatchSender. Запускает фоновый таймер.
 func NewBatchSender(s *sender.Sender, maxBatchSize int, interval time.Duration) *BatchSender {
 	bs := &BatchSender{
 		sender:       s,
@@ -74,6 +79,7 @@ func (bs *BatchSender) Stop() {
 	bs.ticker.Stop()
 }
 
+// WorkerPool — пул воркеров для асинхронной отправки метрик через канал.
 type WorkerPool struct {
 	ingestChan  chan []*collector.Metric
 	sender      *sender.Sender
@@ -81,6 +87,8 @@ type WorkerPool struct {
 	wg          sync.WaitGroup
 }
 
+// NewWorkerPool создаёт новый WorkerPool с указанным отправителем и количеством воркеров.
+// Возвращает указатель на инициализированный WorkerPool с буферизованным каналом (ёмкость 20).
 func NewWorkerPool(s *sender.Sender, workerCount int) *WorkerPool {
 	return &WorkerPool{
 		ingestChan:  make(chan []*collector.Metric, 20),

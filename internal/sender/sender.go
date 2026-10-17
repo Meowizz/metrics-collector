@@ -31,12 +31,17 @@ var jsonBufferPool = sync.Pool{
 	},
 }
 
+// Sender — отправитель метрик на сервер через HTTP с поддержкой gzip-сжатия
+// и хеширования запросов.
 type Sender struct {
 	serverURL string
 	hashKey   string
 	client    *http.Client
 }
 
+// NewSender создаёт новый Sender для отправки метрик на указанный serverURL
+// с использованием заданного hashKey для SHA256-хеширования.
+// Возвращает указатель на инициализированный Sender с HTTP-клиентом со временем ожидания 10с.
 func NewSender(serverURL string, hashKey string) *Sender {
 	client := &http.Client{
 		Transport: &GzipTransport{Transport: http.DefaultTransport},
@@ -49,6 +54,7 @@ func NewSender(serverURL string, hashKey string) *Sender {
 	}
 }
 
+// GzipTransport — HTTP-транспорт, автоматически сжимающий тело JSON-запросов через gzip.
 type GzipTransport struct {
 	Transport http.RoundTripper
 }
@@ -110,6 +116,8 @@ func (g *GzipTransport) transport() http.RoundTripper {
 	return http.DefaultTransport
 }
 
+// Send отправляет каждую метрику отдельным POST-запросом на URL-путь
+// /update/{type}/{name}/{value} в формате text/plain.
 func (s *Sender) Send(metrics []*collector.Metric) error {
 	for _, metric := range metrics {
 		var valueStr string
@@ -147,6 +155,8 @@ func (s *Sender) Send(metrics []*collector.Metric) error {
 	return nil
 }
 
+// SendJSON отправляет каждую метрику отдельным POST-запросом на /update
+// в формате JSON с использованием DoWithRetry для повторных попыток.
 func (s *Sender) SendJSON(metrics []*collector.Metric) error {
 	for _, metric := range metrics {
 		reqMetric := models.Metrics{
@@ -212,6 +222,8 @@ func (s *Sender) SendJSON(metrics []*collector.Metric) error {
 	return nil
 }
 
+// SendBatch отправляет пакет метрик одним POST-запросом на /updates
+// в формате JSON-массива с использованием DoWithRetry для повторных попыток.
 func (s *Sender) SendBatch(metrics []*collector.Metric) error {
 	if len(metrics) == 0 {
 		return nil
