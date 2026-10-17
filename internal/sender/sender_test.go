@@ -227,3 +227,58 @@ func TestSender_Send_ValueFormatting(t *testing.T) {
 		t.Errorf("Expected URL to contain 42, got %s", receivedURL)
 	}
 }
+
+func generateTestMetrics(count int) []*collector.Metric {
+	metrics := make([]*collector.Metric, count)
+
+	for i := 0; i < count; i++ {
+		if i%2 == 0 {
+			metrics[i] = &collector.Metric{
+				Type:  collector.Gauge,
+				Name:  "TestGaugeMetricName",
+				Value: float64(i) * 1.5,
+			}
+		} else {
+			metrics[i] = &collector.Metric{
+				Type:  collector.Counter,
+				Name:  "TestCounterMetricName",
+				Value: int(i),
+			}
+		}
+	}
+	return metrics
+}
+
+func BenchmarkSender_Send(b *testing.B) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	s := NewSender(server.URL, "test-secret-hash-key")
+	metrics := generateTestMetrics(100)
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		_ = s.Send(metrics)
+	}
+}
+
+func BenchmarkSender_SendBatch(b *testing.B) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	s := NewSender(server.URL, "test-secret-hash-key")
+	metrics := generateTestMetrics(1000)
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		_ = s.SendBatch(metrics)
+	}
+}
