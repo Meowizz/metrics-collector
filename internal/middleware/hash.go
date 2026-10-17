@@ -11,7 +11,7 @@ import (
 
 type responseRecorder struct {
 	http.ResponseWriter
-	header http.Header
+	header      http.Header
 	body        *bytes.Buffer
 	wroteHeader bool
 	statusCode  int
@@ -33,16 +33,16 @@ func (r *responseRecorder) WriteHeader(statusCode int) {
 
 	realHeader := r.ResponseWriter.Header()
 
-	for key, values := range r.header{
-		for _ , value := range values {
-			realHeader.Add(key,value)
+	for key, values := range r.header {
+		for _, value := range values {
+			realHeader.Add(key, value)
 		}
 	}
 
 	r.ResponseWriter.WriteHeader(statusCode)
 }
 
-func (r *responseRecorder) Header() http.Header{
+func (r *responseRecorder) Header() http.Header {
 	return r.header
 }
 
@@ -88,7 +88,7 @@ func HashMiddleware(next http.Handler, key string) http.Handler {
 			ResponseWriter: w,
 			body:           &bytes.Buffer{},
 			statusCode:     http.StatusOK,
-			header: make(http.Header),
+			header:         make(http.Header),
 		}
 
 		next.ServeHTTP(recorder, r)
