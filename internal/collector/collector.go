@@ -5,7 +5,6 @@ import (
 	"runtime"
 	"strconv"
 	"sync"
-	"time"
 
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/mem"
@@ -30,7 +29,6 @@ type Collector struct {
 }
 
 func NewCollector() *Collector {
-	rand.Seed(time.Now().UnixNano())
 	return &Collector{
 		metrics: make(map[string]*Metric),
 	}
