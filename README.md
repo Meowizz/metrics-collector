@@ -42,3 +42,27 @@ git fetch template && git checkout template/v2 .github
 - **Clean Architecture**
 - **Hexagonal Architecture**
 - **Layered Architecture**
+
+
+
+## Оптимизация памяти (pprof)
+
+Основные аллокации происходили из-за постоянного создания новых буферов при сериализации JSON и сжатии данных в `GzipTransport`.
+
+**Что было сделано**
+1. **Внедрил `sync.Pool`** для переиспользования `bytes.Buffer`. Теперь мы не создаем буфер с нуля при каждом запросе, а берем свободный из пула. Это заметно снизило нагрузку на сборщик мусора (GC).
+2. **Поправил работу со слайсами и форматированием**, убрав лишние выделения памяти в «горячих» участках кода.
+
+**Результат:*
+
+❯ go tool pprof -top -diff_base=profiles/base.pprof profiles/result.pprof
+File: sender.test
+Type: alloc_space
+Time: 2026-10-17 19:28:38 MSK
+Showing nodes accounting for -1.88GB, 5.62% of 33.40GB total
+Dropped 56 nodes (cum <= 0.17GB)
+      flat  flat%   sum%        cum   cum%
+   -1.88GB  5.62%  5.62%    -1.88GB  5.62%  github.com/Meowizz/metrics-collector/internal/sender.(*Sender).SendBatch
+         0     0%  5.62%    -1.88GB  5.62%  github.com/Meowizz/metrics-collector/internal/sender.BenchmarkSender_SendBatch
+         0     0%  5.62%    -1.88GB  5.62%  testing.(*B).launch
+         0     0%  5.62%    -1.88GB  5.62%  testing.(*B).runN
