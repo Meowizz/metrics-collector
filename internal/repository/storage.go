@@ -43,6 +43,7 @@ func NewMemStorage() *MemStorage {
 	}
 }
 
+// UpdateGauge обновляет gauge-метрику в памяти.
 func (m *MemStorage) UpdateGauge(name string, value float64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -51,6 +52,7 @@ func (m *MemStorage) UpdateGauge(name string, value float64) error {
 	return nil
 }
 
+// UpdateCounter увеличивает counter-метрику в памяти на указанное значение.
 func (m *MemStorage) UpdateCounter(name string, value int64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -59,6 +61,8 @@ func (m *MemStorage) UpdateCounter(name string, value int64) error {
 	return nil
 }
 
+// GetGauge возвращает значение gauge-метрики по имени.
+// Возвращает (значение, true) или (0, false) если метрика не найдена.
 func (m *MemStorage) GetGauge(name string) (float64, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -67,6 +71,8 @@ func (m *MemStorage) GetGauge(name string) (float64, bool) {
 	return value, exist
 }
 
+// GetCounter возвращает значение counter-метрики по имени.
+// Возвращает (значение, true) или (0, false) если метрика не найдена.
 func (m *MemStorage) GetCounter(name string) (int64, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -75,6 +81,8 @@ func (m *MemStorage) GetCounter(name string) (int64, bool) {
 	return value, exist
 }
 
+// LoadFromFile загружает состояние метрик из JSON-файла.
+// Если файл не существует, возвращает nil без ошибки.
 func (m *MemStorage) LoadFromFile(filepath string) error {
 	file, err := os.Open(filepath)
 
@@ -102,6 +110,7 @@ func (m *MemStorage) LoadFromFile(filepath string) error {
 	return nil
 }
 
+// SaveToFile сохраняет состояние метрик в JSON-файл.
 func (m *MemStorage) SaveToFile(filepath string) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -131,10 +140,12 @@ func (m *MemStorage) SaveToFile(filepath string) error {
 	return nil
 }
 
+// Ping всегда возвращает nil (in-memory хранилище всегда доступно).
 func (m *MemStorage) Ping() error {
 	return nil
 }
 
+// UpdateBatch обновляет или создаёт пакет метрик в памяти.
 func (m *MemStorage) UpdateBatch(metrics []models.Metrics) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

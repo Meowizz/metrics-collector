@@ -1,6 +1,7 @@
 package audit
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -8,13 +9,15 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 func TestSubject_AttachAndNotify(t *testing.T) {
 	subject := NewSubject()
 
 	// Test that Notify with no observers does not panic
-	subject.Notify(Event{TS: int(time.Now().Unix())})
+	subject.Notify(Event{TS: int64(time.Now().Unix())}, context.Background())
 
 	// Create a mock observer that captures events
 	var mu sync.Mutex
@@ -22,7 +25,7 @@ func TestSubject_AttachAndNotify(t *testing.T) {
 	done := make(chan struct{})
 
 	mockObserver := &mockObserver{
-		updateFn: func(event Event) {
+		updateFn: func(event Event, ctx context.Context) {
 			mu.Lock()
 			capturedEvents = append(capturedEvents, event)
 			mu.Unlock()
@@ -37,11 +40,11 @@ func TestSubject_AttachAndNotify(t *testing.T) {
 
 	// Notify and wait for observer to receive
 	event := Event{
-		TS:      int(time.Now().Unix()),
+		TS:      int64(time.Now().Unix()),
 		Metrics: []string{"Alloc", "Sys"},
 		IP:      "127.0.0.1",
 	}
-	subject.Notify(event)
+	subject.Notify(event, context.Background())
 
 	// Wait for observer to receive (with timeout)
 	select {
@@ -75,7 +78,7 @@ func TestSubject_MultipleObservers(t *testing.T) {
 
 	for i := 0; i < 3; i++ {
 		mockObserver := &mockObserver{
-			updateFn: func(event Event) {
+			updateFn: func(event Event, ctx context.Context) {
 				mu.Lock()
 				count++
 				mu.Unlock()
@@ -85,8 +88,8 @@ func TestSubject_MultipleObservers(t *testing.T) {
 		subject.Attach(mockObserver)
 	}
 
-	event := Event{TS: int(time.Now().Unix())}
-	subject.Notify(event)
+	event := Event{TS: int64(time.Now().Unix())}
+	subject.Notify(event, context.Background())
 
 	// Wait for all observers
 	for i := 0; i < 3; i++ {
@@ -107,7 +110,7 @@ func TestSubject_MultipleObservers(t *testing.T) {
 func TestFileAuditObserver(t *testing.T) {
 	tempFile := t.TempDir() + "/audit.log"
 
-	observer, err := NewFileAuditObserver(tempFile)
+	observer, err := NewFileAuditObserver(tempFile, zap.NewNop())
 	if err != nil {
 		t.Fatalf("failed to create FileAuditObserver: %v", err)
 	}
@@ -119,7 +122,7 @@ func TestFileAuditObserver(t *testing.T) {
 		IP:      "192.168.1.1",
 	}
 
-	observer.Update(event)
+	observer.Update(event, context.Background())
 
 	// Read the file and verify content
 	data, err := os.ReadFile(tempFile)
@@ -151,24 +154,24 @@ func TestFileAuditObserver(t *testing.T) {
 func TestFileAuditObserver_AppendMode(t *testing.T) {
 	tempFile := t.TempDir() + "/audit_append.log"
 
-	observer1, err := NewFileAuditObserver(tempFile)
+	observer1, err := NewFileAuditObserver(tempFile, zap.NewNop())
 	if err != nil {
 		t.Fatalf("failed to create FileAuditObserver: %v", err)
 	}
 
 	event1 := Event{TS: 100, Metrics: []string{"Metric1"}, IP: "1.1.1.1"}
-	observer1.Update(event1)
+	observer1.Update(event1, context.Background())
 	observer1.Close()
 
 	// Open in append mode again
-	observer2, err := NewFileAuditObserver(tempFile)
+	observer2, err := NewFileAuditObserver(tempFile, zap.NewNop())
 	if err != nil {
 		t.Fatalf("failed to create second FileAuditObserver: %v", err)
 	}
 	defer observer2.Close()
 
 	event2 := Event{TS: 200, Metrics: []string{"Metric2"}, IP: "2.2.2.2"}
-	observer2.Update(event2)
+	observer2.Update(event2, context.Background())
 
 	// Read and verify both events are present
 	data, err := os.ReadFile(tempFile)
@@ -213,15 +216,15 @@ func TestHTTPAuditObserver(t *testing.T) {
 	}))
 	defer server.Close()
 
-	observer := NewHTTPObserver(server.URL)
+	observer := NewHTTPObserver(server.URL, zap.NewNop())
 
 	event := Event{
-		TS:      int(time.Now().Unix()),
+		TS:      int64(time.Now().Unix()),
 		Metrics: []string{"TestMetric"},
 		IP:      "10.0.0.1",
 	}
 
-	observer.Update(event)
+	observer.Update(event, context.Background())
 
 	// Wait for server to receive
 	select {
@@ -252,10 +255,10 @@ func TestHTTPAuditObserver_ServerError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	observer := NewHTTPObserver(server.URL)
+	observer := NewHTTPObserver(server.URL, zap.NewNop())
 
-	event := Event{TS: int(time.Now().Unix())}
-	observer.Update(event)
+	event := Event{TS: int64(time.Now().Unix())}
+	observer.Update(event, context.Background())
 
 	// Wait for request to complete
 	select {
@@ -266,11 +269,11 @@ func TestHTTPAuditObserver_ServerError(t *testing.T) {
 }
 
 type mockObserver struct {
-	updateFn func(Event)
+	updateFn func(Event, context.Context)
 }
 
-func (m *mockObserver) Update(event Event) {
+func (m *mockObserver) Update(event Event, ctx context.Context) {
 	if m.updateFn != nil {
-		m.updateFn(event)
+		m.updateFn(event, ctx)
 	}
 }

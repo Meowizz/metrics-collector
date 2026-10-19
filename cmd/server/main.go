@@ -51,7 +51,7 @@ func main() {
 	}
 
 	if cfg.AuditFile != "" {
-		fileObs, err := audit.NewFileAuditObserver(cfg.AuditFile)
+		fileObs, err := audit.NewFileAuditObserver(cfg.AuditFile, logger.Log)
 		if err != nil {
 			log.Fatal("Can`t work with file [AUDIT]")
 		}
@@ -60,7 +60,7 @@ func main() {
 	}
 
 	if cfg.AuditURL != "" {
-		httpObs := audit.NewHTTPObserver(cfg.AuditURL)
+		httpObs := audit.NewHTTPObserver(cfg.AuditURL, logger.Log)
 		auditSubj.Attach(httpObs)
 	}
 

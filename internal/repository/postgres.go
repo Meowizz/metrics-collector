@@ -65,14 +65,18 @@ func RunMigrations(dsn string, migrationPath string) error {
 	return nil
 }
 
+// Ping проверяет доступность базы данных.
 func (p *PostgresStorage) Ping() error {
 	return p.db.Ping()
 }
 
+// Close закрывает соединение с базой данных.
 func (p *PostgresStorage) Close() error {
 	return p.db.Close()
 }
 
+// UpdateGauge обновляет или создаёт gauge-метрику в PostgreSQL.
+// При ошибке выполняет до 3 повторных попыток с задержками 1s, 3s, 5s.
 func (p *PostgresStorage) UpdateGauge(name string, value float64) error {
 
 	delays := []time.Duration{1 * time.Second, 3 * time.Second, 5 * time.Second}
@@ -100,6 +104,8 @@ func (p *PostgresStorage) UpdateGauge(name string, value float64) error {
 	return fmt.Errorf("database operation failed after 3 retries: %w", lastErr)
 }
 
+// UpdateCounter увеличивает counter-метрику в PostgreSQL на указанное значение.
+// При ошибке выполняет до 3 повторных попыток с задержками 1s, 3s, 5s.
 func (p *PostgresStorage) UpdateCounter(name string, value int64) error {
 
 	delays := []time.Duration{1 * time.Second, 3 * time.Second, 5 * time.Second}
@@ -127,6 +133,9 @@ func (p *PostgresStorage) UpdateCounter(name string, value int64) error {
 	return fmt.Errorf("database operation failed after 3 retries: %w", lastErr)
 }
 
+// GetGauge возвращает значение gauge-метрики по имени.
+// Возвращает (значение, true) или (0, false) если метрика не найдена.
+// При ошибке выполняет до 3 повторных попыток.
 func (p *PostgresStorage) GetGauge(name string) (float64, bool) {
 	query := `SELECT value FROM metrics WHERE id = $1 AND type = 'gauge'`
 
@@ -160,6 +169,9 @@ func (p *PostgresStorage) GetGauge(name string) (float64, bool) {
 	return 0, false
 }
 
+// GetCounter возвращает значение counter-метрики по имени.
+// Возвращает (значение, true) или (0, false) если метрика не найдена.
+// При ошибке выполняет до 3 повторных попыток.
 func (p *PostgresStorage) GetCounter(name string) (int64, bool) {
 	query := `SELECT value FROM metrics WHERE id = $1 AND type = 'counter'`
 	delays := []time.Duration{1 * time.Second, 3 * time.Second, 5 * time.Second}
@@ -193,6 +205,8 @@ func (p *PostgresStorage) GetCounter(name string) (int64, bool) {
 	return 0, false
 }
 
+// UpdateBatch обновляет или создаёт пакет метрик в одной транзакции.
+// При ошибке выполняет до 3 повторных попыток.
 func (p *PostgresStorage) UpdateBatch(metrics []models.Metrics) error {
 	delays := []time.Duration{1 * time.Second, 3 * time.Second, 5 * time.Second}
 	var lastErr error

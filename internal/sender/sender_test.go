@@ -243,7 +243,7 @@ func generateTestMetrics(count int) []*collector.Metric {
 			metrics[i] = &collector.Metric{
 				Type:  collector.Counter,
 				Name:  "TestCounterMetricName",
-				Value: int(i),
+				Value: int64(i),
 			}
 		}
 	}
@@ -252,29 +252,29 @@ func generateTestMetrics(count int) []*collector.Metric {
 
 func TestSender_SendJSON(t *testing.T) {
 	tests := []struct {
-		name        string
-		metrics     []*collector.Metric
-		serverResp  int
-		wantErr     bool
-		hashKey     string
+		name       string
+		metrics    []*collector.Metric
+		serverResp int
+		wantErr    bool
+		hashKey    string
 	}{
 		{
 			name: "SendJSON gauge successfully",
 			metrics: []*collector.Metric{
 				{Type: collector.Gauge, Name: "Alloc", Value: float64(123.45)},
 			},
-			serverResp:  http.StatusOK,
-			wantErr:     false,
-			hashKey:     "",
+			serverResp: http.StatusOK,
+			wantErr:    false,
+			hashKey:    "",
 		},
 		{
 			name: "SendJSON counter successfully",
 			metrics: []*collector.Metric{
 				{Type: collector.Counter, Name: "PollCount", Value: int64(42)},
 			},
-			serverResp:  http.StatusOK,
-			wantErr:     false,
-			hashKey:     "",
+			serverResp: http.StatusOK,
+			wantErr:    false,
+			hashKey:    "",
 		},
 		{
 			name: "SendJSON unknown value type",
@@ -290,9 +290,9 @@ func TestSender_SendJSON(t *testing.T) {
 			metrics: []*collector.Metric{
 				{Type: collector.Gauge, Name: "Alloc", Value: float64(100.0)},
 			},
-			serverResp:  http.StatusInternalServerError,
-			wantErr:     true,
-			hashKey:     "",
+			serverResp: http.StatusInternalServerError,
+			wantErr:    true,
+			hashKey:    "",
 		},
 	}
 
@@ -330,11 +330,11 @@ func TestSender_SendJSON(t *testing.T) {
 
 func TestSender_SendBatch(t *testing.T) {
 	tests := []struct {
-		name        string
-		metrics     []*collector.Metric
-		serverResp  int
-		wantErr     bool
-		hashKey     string
+		name       string
+		metrics    []*collector.Metric
+		serverResp int
+		wantErr    bool
+		hashKey    string
 	}{
 		{
 			name: "SendBatch multiple metrics successfully",
@@ -348,11 +348,11 @@ func TestSender_SendBatch(t *testing.T) {
 			hashKey:    "",
 		},
 		{
-			name:        "SendBatch empty metrics",
-			metrics:     []*collector.Metric{},
-			serverResp:  http.StatusOK,
-			wantErr:     false,
-			hashKey:     "",
+			name:       "SendBatch empty metrics",
+			metrics:    []*collector.Metric{},
+			serverResp: http.StatusOK,
+			wantErr:    false,
+			hashKey:    "",
 		},
 		{
 			name: "SendBatch unknown value type",
@@ -368,18 +368,18 @@ func TestSender_SendBatch(t *testing.T) {
 			metrics: []*collector.Metric{
 				{Type: collector.Gauge, Name: "Gauge1", Value: float64(10.0)},
 			},
-			serverResp:  http.StatusInternalServerError,
-			wantErr:     true,
-			hashKey:     "",
+			serverResp: http.StatusInternalServerError,
+			wantErr:    true,
+			hashKey:    "",
 		},
 		{
 			name: "SendBatch client error (400)",
 			metrics: []*collector.Metric{
 				{Type: collector.Gauge, Name: "Gauge1", Value: float64(10.0)},
 			},
-			serverResp:  http.StatusBadRequest,
-			wantErr:     true,
-			hashKey:     "",
+			serverResp: http.StatusBadRequest,
+			wantErr:    true,
+			hashKey:    "",
 		},
 	}
 
@@ -427,8 +427,9 @@ func BenchmarkSender_Send(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
-		_ = s.Send(metrics)
+	for {
+		b.Loop()
+		s.Send(metrics)
 	}
 }
 
@@ -444,7 +445,8 @@ func BenchmarkSender_SendBatch(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
-		_ = s.SendBatch(metrics)
+	for {
+		b.Loop()
+		s.Send(metrics)
 	}
 }

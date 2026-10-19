@@ -9,6 +9,7 @@ import (
 
 	"github.com/Meowizz/metrics-collector/internal/collector"
 	"github.com/Meowizz/metrics-collector/internal/sender"
+	"go.uber.org/zap"
 )
 
 func TestBatchSender_AddAndFlush(t *testing.T) {
@@ -21,7 +22,7 @@ func TestBatchSender_AddAndFlush(t *testing.T) {
 	defer server.Close()
 
 	s := sender.NewSender(server.URL, "")
-	bs := NewBatchSender(s, 3, 10*time.Second) // max batch size = 3, interval = 10s
+	bs := NewBatchSender(s, 3, 10*time.Second, zap.NewNop()) // max batch size = 3, interval = 10s
 
 	// Add 3 metrics to trigger flush
 	metrics1 := []*collector.Metric{
@@ -53,7 +54,7 @@ func TestBatchSender_TimerFlush(t *testing.T) {
 
 	s := sender.NewSender(server.URL, "")
 	// Use a very short interval (50ms)
-	bs := NewBatchSender(s, 100, 50*time.Millisecond)
+	bs := NewBatchSender(s, 100, 50*time.Millisecond, zap.NewNop())
 
 	// Add 1 metric (less than max batch size of 100)
 	metrics := []*collector.Metric{
@@ -82,7 +83,7 @@ func TestBatchSender_EmptyBuffer(t *testing.T) {
 	defer server.Close()
 
 	s := sender.NewSender(server.URL, "")
-	bs := NewBatchSender(s, 3, 10*time.Second)
+	bs := NewBatchSender(s, 3, 10*time.Second, zap.NewNop())
 
 	// Don't add any metrics, just flush and stop
 	bs.FlushAndStop()
@@ -104,7 +105,7 @@ func TestWorkerPool(t *testing.T) {
 	defer server.Close()
 
 	s := sender.NewSender(server.URL, "")
-	pool := NewWorkerPool(s, 2) // 2 workers
+	pool := NewWorkerPool(s, 2, zap.NewNop()) // 2 workers
 
 	pool.StartWorkingPool()
 
@@ -137,9 +138,7 @@ func TestWorkerPool_EmptyBatch(t *testing.T) {
 	defer server.Close()
 
 	s := sender.NewSender(server.URL, "")
-	pool := NewWorkerPool(s, 2)
-
-	pool.StartWorkingPool()
+	pool := NewWorkerPool(s, 2, zap.NewNop())
 
 	// Send empty batch - should not trigger a send
 	pool.Ingest([]*collector.Metric{})
@@ -156,7 +155,7 @@ func TestWorkerPool_EmptyBatch(t *testing.T) {
 
 func TestBatchSender_Stop(t *testing.T) {
 	s := sender.NewSender("http://localhost:9999", "") // unreachable URL
-	bs := NewBatchSender(s, 100, 50*time.Millisecond)
+	bs := NewBatchSender(s, 100, 50*time.Millisecond, zap.NewNop())
 
 	// Add some metrics but don't flush
 	bs.Add([]*collector.Metric{

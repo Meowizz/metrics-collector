@@ -48,9 +48,6 @@ func TestDoWithRetry_FailsAfterMaxRetries(t *testing.T) {
 	if attemptCount != 4 { // 1 initial + 3 retries
 		t.Errorf("expected 4 attempts, got %d", attemptCount)
 	}
-	if attemptCount != 4 {
-		t.Fatalf("expected 4 total attempts (1 initial + 3 retries), got %d", attemptCount)
-	}
 }
 
 func TestDoWithRetry_NonRetriable(t *testing.T) {
