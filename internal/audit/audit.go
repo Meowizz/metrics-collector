@@ -143,9 +143,11 @@ func (h *HTTPAuditObserver) Update(event Event, ctx context.Context) {
 		return
 	}
 	var resp *http.Response
+	defer resp.Body.Close()
 
 	err = pkg.DoWithRetry(func() error {
 		r, err := h.client.Do(req)
+
 		if err != nil {
 			return err
 		}
