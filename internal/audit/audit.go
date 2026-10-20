@@ -25,35 +25,163 @@ type Observer interface {
 	Update(event Event, ctx context.Context)
 }
 
+// defaultBufSize — размер буфера по умолчанию для каналов observerWorker.
+const defaultBufSize = 1024
+
+// observerWorker — выделенная горутина-воркер с буферизованным каналом
+// для одного наблюдателя. Гарантирует одну горутину на observer вместо
+// создания новой горутны на каждое событие.
+type observerWorker struct {
+	observer Observer
+	ch       chan Event
+	done     chan struct{}
+	wg       sync.WaitGroup
+}
+
+// newObserverWorker создаёт нового observerWorker, запускает горутину-воркер.
+func newObserverWorker(o Observer, bufSize int) *observerWorker {
+	w := &observerWorker{
+		observer: o,
+		ch:       make(chan Event, bufSize),
+		done:     make(chan struct{}),
+	}
+	w.wg.Add(1)
+	go w.run()
+	return w
+}
+
+// run — основной цикл воркера: читает события из канала и передаёт их observer.
+func (w *observerWorker) run() {
+	defer w.wg.Done()
+
+	for {
+		select {
+		case <-w.done:
+			// Graceful shutdown: обрабатываем оставшиеся события
+			for {
+				select {
+				case event := <-w.ch:
+					w.observer.Update(event, context.Background())
+				default:
+					return
+				}
+			}
+		case event := <-w.ch:
+			w.observer.Update(event, context.Background())
+		}
+	}
+}
+
+// send отправляет событие в канал воркера.
+// Non-blocking: при переполнении буфера отбрасывает самое старое событие.
+// Возвращает true если событие принято, false если worker остановлен.
+func (w *observerWorker) send(event Event) bool {
+	select {
+	case <-w.done:
+		return false
+	default:
+	}
+
+	select {
+	case w.ch <- event:
+		return true
+	default:
+		// Буфер полон — отбрасываем самое старое событие
+		select {
+		case <-w.ch:
+		default:
+		}
+		// Повторная попытка после освобождения места
+		select {
+		case w.ch <- event:
+			return true
+		default:
+			// Zero buffer и нет читателя — дропаем событие
+			return false
+		}
+	}
+}
+
+// stop отправляет сигнал остановки воркеру.
+func (w *observerWorker) stop() {
+	close(w.done)
+}
+
+// wait ожидает завершения горутны-воркера.
+func (w *observerWorker) wait() {
+	w.wg.Wait()
+}
+
 // Subject — реализация паттерна Observer для управления подписками
 // и уведомлениями наблюдателей о событиях аудита.
+// Каждый наблюдатель имеет своего воркера с выделенной горутинной.
 type Subject struct {
-	observers []Observer
-	mu        sync.Mutex
+	workers map[Observer]*observerWorker
+	mu      sync.RWMutex
 }
 
 // NewSubject создаёт новый пустой Subject для управления наблюдателями аудита.
 // Возвращает указатель на инициализированный Subject.
 func NewSubject() *Subject {
-	return &Subject{observers: make([]Observer, 0)}
+	return &Subject{workers: make(map[Observer]*observerWorker)}
 }
 
 // Attach добавляет наблюдателя в список подписчиков для получения событий аудита.
+// Если данный observer уже подключён, метод ничего не делает.
 func (s *Subject) Attach(o Observer) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.observers = append(s.observers, o)
+
+	if _, exists := s.workers[o]; exists {
+		return
+	}
+
+	s.workers[o] = newObserverWorker(o, defaultBufSize)
 }
 
-// Notify уведомляет всех наблюдателей о событии в отдельных горутинах.
+// Notify уведомляет всех наблюдателей о событии через их воркеры.
+// Никаких новых горутин не создаётся.
 func (s *Subject) Notify(event Event, ctx context.Context) {
+	s.mu.RLock()
+	workers := make(map[Observer]*observerWorker, len(s.workers))
+	for k, v := range s.workers {
+		workers[k] = v
+	}
+	s.mu.RUnlock()
+
+	for _, w := range workers {
+		w.send(event)
+	}
+}
+
+// Detach удаляет наблюдателя и останавливает его воркер с graceful shutdown.
+func (s *Subject) Detach(o Observer) {
 	s.mu.Lock()
-	observers := make([]Observer, len(s.observers))
-	copy(observers, s.observers)
+	w, exists := s.workers[o]
+	if !exists {
+		s.mu.Unlock()
+		return
+	}
+	delete(s.workers, o)
 	s.mu.Unlock()
 
-	for _, o := range observers {
-		go o.Update(event, ctx)
+	w.stop()
+	w.wait()
+}
+
+// Shutdown полностью останавливает все воркеры и освобождает ресурсы.
+func (s *Subject) Shutdown() {
+	s.mu.Lock()
+	workers := make([]*observerWorker, 0, len(s.workers))
+	for _, w := range s.workers {
+		workers = append(workers, w)
+	}
+	s.workers = make(map[Observer]*observerWorker)
+	s.mu.Unlock()
+
+	for _, w := range workers {
+		w.stop()
+		w.wait()
 	}
 }
 

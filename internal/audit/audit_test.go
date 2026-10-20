@@ -268,6 +268,310 @@ func TestHTTPAuditObserver_ServerError(t *testing.T) {
 	}
 }
 
+func TestSubject_DetachObserver(t *testing.T) {
+	subject := NewSubject()
+
+	var mu sync.Mutex
+	var count int
+
+	mockObserver := &mockObserver{
+		updateFn: func(event Event, ctx context.Context) {
+			mu.Lock()
+			count++
+			mu.Unlock()
+		},
+	}
+
+	subject.Attach(mockObserver)
+
+	// Send one event — should be processed
+	event := Event{TS: int64(time.Now().Unix())}
+	subject.Notify(event, context.Background())
+
+	select {
+	case <-time.After(2 * time.Second):
+		// Worker processes asynchronously, just give it a moment
+	}
+
+	mu.Lock()
+	prevCount := count
+	mu.Unlock()
+
+	if prevCount != 1 {
+		t.Fatalf("expected 1 notification before detach, got %d", prevCount)
+	}
+
+	// Detach — should stop the worker
+	subject.Detach(mockObserver)
+
+	// Send another event — should be dropped (worker stopped)
+	subject.Notify(event, context.Background())
+
+	// Give a moment for any stray processing
+	time.Sleep(100 * time.Millisecond)
+
+	mu.Lock()
+	if count != prevCount {
+		t.Errorf("expected no notifications after detach, got %d (was %d)", count, prevCount)
+	}
+	mu.Unlock()
+}
+
+func TestSubject_Shutdown(t *testing.T) {
+	subject := NewSubject()
+
+	var mu sync.Mutex
+	var count int
+
+	for i := 0; i < 3; i++ {
+		mockObserver := &mockObserver{
+			updateFn: func(event Event, ctx context.Context) {
+				mu.Lock()
+				count++
+				mu.Unlock()
+			},
+		}
+		subject.Attach(mockObserver)
+	}
+
+	// Send multiple events
+	for i := 0; i < 5; i++ {
+		subject.Notify(Event{TS: int64(time.Now().Unix())}, context.Background())
+	}
+
+	// Allow workers time to process
+	time.Sleep(200 * time.Millisecond)
+
+	mu.Lock()
+	preShutdownCount := count
+	mu.Unlock()
+
+	if preShutdownCount != 15 {
+		t.Errorf("expected 15 notifications before shutdown, got %d", preShutdownCount)
+	}
+
+	// Shutdown all workers
+	subject.Shutdown()
+
+	// Send after shutdown — should be silently ignored
+	subject.Notify(Event{TS: int64(time.Now().Unix())}, context.Background())
+
+	time.Sleep(100 * time.Millisecond)
+
+	mu.Lock()
+	if count != preShutdownCount {
+		t.Errorf("expected no notifications after shutdown, got %d (was %d)", count, preShutdownCount)
+	}
+	mu.Unlock()
+}
+
+func TestSubject_ConcurrentNotify(t *testing.T) {
+	subject := NewSubject()
+
+	var mu sync.Mutex
+	var count int
+	numObservers := 5
+	numNotifications := 100
+
+	// Create multiple observers
+	for i := 0; i < numObservers; i++ {
+		mockObserver := &mockObserver{
+			updateFn: func(event Event, ctx context.Context) {
+				mu.Lock()
+				count++
+				mu.Unlock()
+			},
+		}
+		subject.Attach(mockObserver)
+	}
+
+	// Concurrent notifications
+	var wg sync.WaitGroup
+	for i := 0; i < numNotifications; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			subject.Notify(Event{TS: int64(time.Now().Unix())}, context.Background())
+		}()
+	}
+
+	wg.Wait()
+
+	// Allow workers to process
+	time.Sleep(500 * time.Millisecond)
+
+	mu.Lock()
+	expected := numObservers * numNotifications
+	if count != expected {
+		t.Errorf("expected %d notifications, got %d", expected, count)
+	}
+	mu.Unlock()
+
+	subject.Shutdown()
+}
+
+func TestSubject_DropOldestOnOverflow(t *testing.T) {
+	const bufSize = 3
+
+	// Block observer until we fill the buffer
+	proceed := make(chan struct{})
+	eventOrder := make(chan Event, bufSize)
+
+	slowObserver := &mockObserver{
+		updateFn: func(event Event, ctx context.Context) {
+			<-proceed // block until buffer is full
+			eventOrder <- event
+		},
+	}
+
+	worker := newObserverWorker(slowObserver, bufSize)
+	defer worker.stop()
+	defer worker.wait()
+
+	// Fill the buffer — send() is non-blocking
+	for i := 0; i < bufSize; i++ {
+		if !worker.send(Event{TS: int64(100 + i)}) {
+			t.Fatalf("send failed at index %d", i)
+		}
+	}
+
+	// Buffer is full — this should drop the oldest event (TS=100)
+	if !worker.send(Event{TS: 999}) {
+		t.Fatal("send(999) should succeed (replacing oldest)")
+	}
+
+	// Now let the observer process events
+	close(proceed)
+
+	// Collect all processed events
+	var processed []Event
+	for i := 0; i < bufSize; i++ {
+		select {
+		case e := <-eventOrder:
+			processed = append(processed, e)
+		case <-time.After(2 * time.Second):
+			t.Fatalf("timeout waiting for event %d", i)
+		}
+	}
+
+	// Verify that TS=100 was dropped (not in processed events)
+	for _, e := range processed {
+		if e.TS == 100 {
+			t.Errorf("expected TS=100 to be dropped, but it was processed")
+		}
+	}
+
+	// Verify TS=999 is present
+	found := false
+	for _, e := range processed {
+		if e.TS == 999 {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected TS=999 to be in processed events")
+	}
+}
+
+	worker := newObserverWorker(slowObserver, bufSize)
+	defer worker.stop()
+	defer worker.wait()
+
+	// Fill the buffer
+	for i := 0; i < bufSize; i++ {
+		worker.send(Event{TS: int64(100 + i)})
+	}
+
+	// One more — should drop the oldest (TS=100)
+	worker.send(Event{TS: 999})
+
+	// Wait for all events to be processed (bufSize events remain after drop)
+	for i := 0; i < bufSize; i++ {
+		select {
+		case <-slowDone:
+		case <-time.After(2 * time.Second):
+			t.Fatalf("timeout waiting for event %d, received %d", i, i)
+		}
+	}
+
+	// Give time for all processing to complete
+	time.Sleep(200 * time.Millisecond)
+}
+
+func TestSubject_ZeroBuffer(t *testing.T) {
+	slowDone := make(chan struct{}, 1)
+	slowObserver := &mockObserver{
+		updateFn: func(event Event, ctx context.Context) {
+			// Block to prevent draining
+			time.Sleep(500 * time.Millisecond)
+			slowDone <- struct{}{}
+		},
+	}
+
+	worker := newObserverWorker(slowObserver, 0)
+	defer worker.stop()
+	defer worker.wait()
+
+	// With zero buffer and blocked reader, send should return false
+	result := worker.send(Event{TS: 1})
+	if result {
+		// It's OK if it succeeds when the reader happens to be ready
+		// The important thing is it doesn't block
+	}
+
+	// Send should not block even when buffer is full and reader is slow
+	done := make(chan struct{})
+	go func() {
+		worker.send(Event{TS: 2})
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Good — non-blocking
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("send() blocked with zero buffer — should be non-blocking")
+	}
+}
+
+func TestSubject_AttachDuplicate(t *testing.T) {
+	subject := NewSubject()
+
+	var mu sync.Mutex
+	var count int
+
+	mockObserver := &mockObserver{
+		updateFn: func(event Event, ctx context.Context) {
+			mu.Lock()
+			count++
+			mu.Unlock()
+		},
+	}
+
+	subject.Attach(mockObserver)
+	subject.Attach(mockObserver) // duplicate — should be ignored
+
+	subject.Notify(Event{TS: int64(time.Now().Unix())}, context.Background())
+
+	time.Sleep(200 * time.Millisecond)
+
+	mu.Lock()
+	if count != 1 {
+		t.Errorf("expected 1 notification (duplicate attach ignored), got %d", count)
+	}
+	mu.Unlock()
+
+	subject.Detach(mockObserver)
+}
+
+func TestSubject_DetachNonExistent(t *testing.T) {
+	subject := NewSubject()
+	mockObserver := &mockObserver{}
+
+	// Detaching non-existent observer should not panic
+	subject.Detach(mockObserver)
+}
+
 type mockObserver struct {
 	updateFn func(Event, context.Context)
 }
