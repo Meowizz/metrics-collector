@@ -136,16 +136,15 @@ func (h *HTTPAuditObserver) Update(event Event, ctx context.Context) {
 		return
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.url, bytes.NewBuffer(data))
-
-	if err != nil {
-		h.logger.Error("ошибка создания http request", zap.Error(err))
-		return
-	}
 	var resp *http.Response
-	defer resp.Body.Close()
 
 	err = pkg.DoWithRetry(func() error {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.url, bytes.NewBuffer(data))
+
+		if err != nil {
+			return fmt.Errorf("ошибка создания http request: %w", err)
+		}
+
 		r, err := h.client.Do(req)
 
 		if err != nil {
@@ -158,6 +157,7 @@ func (h *HTTPAuditObserver) Update(event Event, ctx context.Context) {
 		h.logger.Error("Audit HTTP send error", zap.Error(err))
 		return
 	}
+
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
