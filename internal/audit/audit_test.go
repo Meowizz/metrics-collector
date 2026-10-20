@@ -489,12 +489,8 @@ func TestSubject_ZeroBuffer(t *testing.T) {
 		worker.wait()
 	}()
 
-	// With zero buffer and blocked reader, send should return false
-	result := worker.send(Event{TS: 1})
-	if result {
-		// It's OK if it succeeds when the reader happens to be ready
-		// The important thing is it doesn't block
-	}
+	// With zero buffer and blocked reader, send must not block
+	_ = worker.send(Event{TS: 1})
 
 	// Send should not block even when buffer is full and reader is slow
 	done := make(chan struct{})
