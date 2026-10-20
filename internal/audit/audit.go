@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Meowizz/metrics-collector/pkg"
 	"go.uber.org/zap"
 )
 
@@ -130,34 +129,35 @@ func NewHTTPObserver(host string, logger *zap.Logger) *HTTPAuditObserver {
 // Update отправляет событие аудита на удалённый HTTP-сервер через POST-запрос.
 func (h *HTTPAuditObserver) Update(event Event, ctx context.Context) {
 	data, err := json.Marshal(event)
-
 	if err != nil {
 		h.logger.Error("ошибка маршалига события аудита", zap.Error(err))
 		return
 	}
 
-	var resp *http.Response
-
-	err = pkg.DoWithRetry(func() error {
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.url, bytes.NewBuffer(data))
-
-		if err != nil {
-			return fmt.Errorf("ошибка создания http request: %w", err)
-		}
-
-		r, err := h.client.Do(req)
-
-		if err != nil {
-			return err
-		}
-		resp = r
-		return nil
-	})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.url, bytes.NewBuffer(data))
 	if err != nil {
-		h.logger.Error("Audit HTTP send error", zap.Error(err))
+		h.logger.Error("ошибка создания http request", zap.Error(err))
 		return
 	}
 
+	var resp *http.Response
+	var retryErr error
+	delays := []time.Duration{1 * time.Second, 3 * time.Second, 5 * time.Second}
+
+	for attempt := 0; attempt <= 3; attempt++ {
+		resp, retryErr = h.client.Do(req)
+		if retryErr == nil {
+			break
+		}
+		if attempt < 3 {
+			time.Sleep(delays[attempt])
+		}
+	}
+
+	if retryErr != nil {
+		h.logger.Error("Audit HTTP send error", zap.Error(retryErr))
+		return
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
