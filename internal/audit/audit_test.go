@@ -425,8 +425,6 @@ func TestSubject_DropOldestOnOverflow(t *testing.T) {
 	}
 
 	worker := newObserverWorker(slowObserver, bufSize)
-	defer worker.stop()
-	defer worker.wait()
 
 	// Fill the buffer — send() is non-blocking
 	for i := 0; i < bufSize; i++ {
@@ -471,31 +469,10 @@ func TestSubject_DropOldestOnOverflow(t *testing.T) {
 	if !found {
 		t.Errorf("expected TS=999 to be in processed events")
 	}
-}
 
-	worker := newObserverWorker(slowObserver, bufSize)
-	defer worker.stop()
-	defer worker.wait()
-
-	// Fill the buffer
-	for i := 0; i < bufSize; i++ {
-		worker.send(Event{TS: int64(100 + i)})
-	}
-
-	// One more — should drop the oldest (TS=100)
-	worker.send(Event{TS: 999})
-
-	// Wait for all events to be processed (bufSize events remain after drop)
-	for i := 0; i < bufSize; i++ {
-		select {
-		case <-slowDone:
-		case <-time.After(2 * time.Second):
-			t.Fatalf("timeout waiting for event %d, received %d", i, i)
-		}
-	}
-
-	// Give time for all processing to complete
-	time.Sleep(200 * time.Millisecond)
+	// Stop the worker and wait for it to exit
+	worker.stop()
+	worker.wait()
 }
 
 func TestSubject_ZeroBuffer(t *testing.T) {
@@ -509,8 +486,10 @@ func TestSubject_ZeroBuffer(t *testing.T) {
 	}
 
 	worker := newObserverWorker(slowObserver, 0)
-	defer worker.stop()
-	defer worker.wait()
+	defer func() {
+		worker.stop()
+		worker.wait()
+	}()
 
 	// With zero buffer and blocked reader, send should return false
 	result := worker.send(Event{TS: 1})
