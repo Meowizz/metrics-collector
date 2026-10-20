@@ -288,10 +288,8 @@ func TestSubject_DetachObserver(t *testing.T) {
 	event := Event{TS: int64(time.Now().Unix())}
 	subject.Notify(event, context.Background())
 
-	select {
-	case <-time.After(2 * time.Second):
-		// Worker processes asynchronously, just give it a moment
-	}
+	// Worker processes asynchronously, give it time
+	time.Sleep(2 * time.Second)
 
 	mu.Lock()
 	prevCount := count
