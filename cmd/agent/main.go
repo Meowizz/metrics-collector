@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"sync"
@@ -18,8 +18,7 @@ func main() {
 	cfg := ParseFlag()
 
 	if err := logger.Initialize("info"); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)
-		os.Exit(1)
+		log.Fatalf("Failed to initialize logger: %v", err)
 	}
 
 	c := collector.NewCollector()
