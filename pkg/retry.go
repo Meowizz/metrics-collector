@@ -6,8 +6,12 @@ import (
 	"time"
 )
 
+// ErrNotRetriable возвращается, когда операция не подлежит повторной попытке.
 var ErrNotRetriable = errors.New("operation is not retriable")
 
+// DoWithRetry выполняет операцию с повторными попытками (до 3 ретраев с задержками 1s, 3s, 5s).
+// Если ошибка равна ErrNotRetriable, возвращает её немедленно без ретраев.
+// Возвращает ошибку после исчерпания всех попыток.
 func DoWithRetry(operation func() error) error {
 	delays := []time.Duration{1 * time.Second, 3 * time.Second, 5 * time.Second}
 	var lastErr error

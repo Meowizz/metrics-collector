@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/Meowizz/metrics-collector/internal/audit"
 	"github.com/Meowizz/metrics-collector/internal/handler"
 	"github.com/Meowizz/metrics-collector/internal/logger"
 	appMiddleware "github.com/Meowizz/metrics-collector/internal/middleware"
@@ -18,7 +19,10 @@ import (
 func main() {
 	//storage := repository.NewMemStorage()
 	//handler := handler.NewMetricsHandler(storage)
+
 	cfg := ParseFlag()
+
+	auditSubj := audit.NewSubject()
 
 	if err := logger.Initialize(cfg.LogLevel); err != nil {
 		panic("Failed to initialized logger: " + err.Error())
@@ -45,7 +49,22 @@ func main() {
 		log.Println("Using in-memory storage")
 		storage = repository.NewMemStorage()
 	}
-	handler := handler.NewMetricsHandler(storage)
+
+	if cfg.AuditFile != "" {
+		fileObs, err := audit.NewFileAuditObserver(cfg.AuditFile, logger.Log)
+		if err != nil {
+			log.Fatal("Can`t work with file [AUDIT]")
+		}
+		auditSubj.Attach(fileObs)
+		defer fileObs.Close()
+	}
+
+	if cfg.AuditURL != "" {
+		httpObs := audit.NewHTTPObserver(cfg.AuditURL, logger.Log)
+		auditSubj.Attach(httpObs)
+	}
+
+	handler := handler.NewMetricsHandler(storage, auditSubj)
 
 	if cfg.Restore {
 		if memStore, ok := storage.(*repository.MemStorage); ok {

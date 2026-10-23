@@ -5,7 +5,6 @@ import (
 	"runtime"
 	"strconv"
 	"sync"
-	"time"
 
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/mem"
@@ -18,24 +17,31 @@ const (
 	Gauge   metricType = "gauge"
 )
 
+// Metric описывает одну метрику с типом (counter/gauge), именем и значением.
 type Metric struct {
 	Type  metricType
 	Name  string
 	Value interface{}
 }
 
+// Collector — коллектор для сбора runtime-метрик Go-приложения (runtime.MemStats)
+// и системных метрик через gopsutil.
 type Collector struct {
 	mu      sync.RWMutex
 	metrics map[string]*Metric
 }
 
+// NewCollector создаёт новый пустой Collector для сбора метрик.
+// Возвращает указатель на инициализированный Collector.
 func NewCollector() *Collector {
-	rand.Seed(time.Now().UnixNano())
 	return &Collector{
 		metrics: make(map[string]*Metric),
 	}
 }
 
+// Collect собирает runtime.MemStats и сохраняет их в internal хранилище коллектора.
+// Записывает метрики: Alloc, HeapAlloc, HeapIdle, HeapInuse, Sys, TotalAlloc,
+// NumGC, PauseTotalNs и другие параметры GC и памяти.
 func (c *Collector) Collect() {
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
@@ -83,6 +89,8 @@ func (c *Collector) Collect() {
 	}
 }
 
+// CollectGopsutil собирает системные метрики через gopsutil:
+// общую и свободную память, утилизацию CPU по ядрам.
 func (c *Collector) CollectGopsutil() {
 	vMem, _ := mem.VirtualMemory()
 	cpuCounts, _ := cpu.Counts(true)
@@ -104,6 +112,8 @@ func (c *Collector) CollectGopsutil() {
 	}
 }
 
+// GetMetrics возвращает срез всех собранных метрик.
+// Возвращает []*Metric — копию внутреннего хранилища метрик.
 func (c *Collector) GetMetrics() []*Metric {
 
 	c.mu.RLock()

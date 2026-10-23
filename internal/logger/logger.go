@@ -34,6 +34,10 @@ func (r *loggingResponseWriter) WriteHeader(statusCode int) {
 	r.responseData.status = statusCode
 }
 
+// Initialize инициализирует глобальный zap-логгер с указанным уровнем логирования.
+// Поддерживаемые уровни: debug, info, warn, error, fatal.
+// Заменяет глобальную переменную Log на настроенный логгер.
+// Возвращает ошибку при некорректном уровне или проблеме конфигурации.
 func Initialize(level string) error {
 	lvl, err := zap.ParseAtomicLevel(level)
 
@@ -53,6 +57,8 @@ func Initialize(level string) error {
 	return nil
 }
 
+// WithLogging — middleware для логирования HTTP-запросов с помощью zap.
+// Записывает URI, метод, код статуса ответа, длительность и размер ответа.
 func WithLogging(h http.Handler) http.Handler {
 	logFn := func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()

@@ -9,17 +9,22 @@ import (
 	models "github.com/Meowizz/metrics-collector/internal/model"
 )
 
+// MemStorage — in-memory хранилище метрик с поддержкой gauge и counter.
+// Безопасен для использования из нескольких горутн благодаря sync.RWMutex.
 type MemStorage struct {
 	mu      sync.RWMutex
 	gauge   map[string]float64
 	counter map[string]int64
 }
 
+// SavedState представляет состояние метрик для сериализации в файл.
 type SavedState struct {
 	Counters map[string]int64   `json:"counters"`
 	Gauges   map[string]float64 `json:"gauges"`
 }
 
+// Storage — интерфейс хранилища метрик с операциями обновления и получения
+// gauge и counter, а также батч-операциями.
 type Storage interface {
 	UpdateGauge(name string, value float64) error
 	UpdateCounter(name string, value int64) error
@@ -29,6 +34,8 @@ type Storage interface {
 	UpdateBatch(metrics []models.Metrics) error
 }
 
+// NewMemStorage создаёт новое пустое in-memory хранилище метрик.
+// Возвращает указатель на инициализированный MemStorage.
 func NewMemStorage() *MemStorage {
 	return &MemStorage{
 		gauge:   make(map[string]float64),
@@ -36,6 +43,7 @@ func NewMemStorage() *MemStorage {
 	}
 }
 
+// UpdateGauge обновляет gauge-метрику в памяти.
 func (m *MemStorage) UpdateGauge(name string, value float64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -44,6 +52,7 @@ func (m *MemStorage) UpdateGauge(name string, value float64) error {
 	return nil
 }
 
+// UpdateCounter увеличивает counter-метрику в памяти на указанное значение.
 func (m *MemStorage) UpdateCounter(name string, value int64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -52,6 +61,8 @@ func (m *MemStorage) UpdateCounter(name string, value int64) error {
 	return nil
 }
 
+// GetGauge возвращает значение gauge-метрики по имени.
+// Возвращает (значение, true) или (0, false) если метрика не найдена.
 func (m *MemStorage) GetGauge(name string) (float64, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -60,6 +71,8 @@ func (m *MemStorage) GetGauge(name string) (float64, bool) {
 	return value, exist
 }
 
+// GetCounter возвращает значение counter-метрики по имени.
+// Возвращает (значение, true) или (0, false) если метрика не найдена.
 func (m *MemStorage) GetCounter(name string) (int64, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -68,6 +81,8 @@ func (m *MemStorage) GetCounter(name string) (int64, bool) {
 	return value, exist
 }
 
+// LoadFromFile загружает состояние метрик из JSON-файла.
+// Если файл не существует, возвращает nil без ошибки.
 func (m *MemStorage) LoadFromFile(filepath string) error {
 	file, err := os.Open(filepath)
 
@@ -75,14 +90,14 @@ func (m *MemStorage) LoadFromFile(filepath string) error {
 		if os.IsNotExist(err) {
 			return nil
 		}
-		return fmt.Errorf("Failed to open file: %w", err)
+		return fmt.Errorf("failed to open file: %w", err)
 	}
 	defer file.Close()
 
 	var state SavedState
 
 	if err := json.NewDecoder(file).Decode(&state); err != nil {
-		return fmt.Errorf("Failed to decode metric: %w", err)
+		return fmt.Errorf("failed to decode metric: %w", err)
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -95,6 +110,7 @@ func (m *MemStorage) LoadFromFile(filepath string) error {
 	return nil
 }
 
+// SaveToFile сохраняет состояние метрик в JSON-файл.
 func (m *MemStorage) SaveToFile(filepath string) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -114,20 +130,22 @@ func (m *MemStorage) SaveToFile(filepath string) error {
 
 	file, err := os.Create(filepath)
 	if err != nil {
-		return fmt.Errorf("Failed to create file: %w", err)
+		return fmt.Errorf("failed to create file: %w", err)
 	}
 	defer file.Close()
 
 	if err := json.NewEncoder(file).Encode(state); err != nil {
-		return fmt.Errorf("Failed to encode metric %w", err)
+		return fmt.Errorf("failed to encode metric %w", err)
 	}
 	return nil
 }
 
+// Ping всегда возвращает nil (in-memory хранилище всегда доступно).
 func (m *MemStorage) Ping() error {
 	return nil
 }
 
+// UpdateBatch обновляет или создаёт пакет метрик в памяти.
 func (m *MemStorage) UpdateBatch(metrics []models.Metrics) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

@@ -10,17 +10,24 @@ import (
 
 	"github.com/Meowizz/metrics-collector/internal/agent"
 	"github.com/Meowizz/metrics-collector/internal/collector"
+	"github.com/Meowizz/metrics-collector/internal/logger"
 	"github.com/Meowizz/metrics-collector/internal/sender"
 )
 
 func main() {
 	cfg := ParseFlag()
+
+	if err := logger.Initialize("info"); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)
+		os.Exit(1)
+	}
+
 	c := collector.NewCollector()
 
 	address := "http://" + cfg.Addr
 	s := sender.NewSender(address, cfg.Key)
 
-	wp := agent.NewWorkerPool(s, cfg.RateLimiter)
+	wp := agent.NewWorkerPool(s, cfg.RateLimiter, logger.Log)
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -38,7 +45,7 @@ func main() {
 
 		c.Collect()
 		c.CollectGopsutil()
-		fmt.Println("Метрики собраны")
+		logger.Log.Info("Метрики собраны")
 
 		for {
 			select {
@@ -47,7 +54,7 @@ func main() {
 			case <-ticker.C:
 				c.Collect()
 				c.CollectGopsutil()
-				fmt.Println("Метрики собраны")
+				logger.Log.Info("Метрики собраны")
 			}
 		}
 	}()
@@ -82,7 +89,7 @@ func main() {
 	}()
 
 	<-quit
-	fmt.Println("\n Получен сигнал завершения. Корректная остановка агента..")
+	logger.Log.Warn("Получен сигнал завершения. Корректная остановка агента..")
 
 	close(stop)
 
@@ -96,9 +103,9 @@ func main() {
 
 	select {
 	case <-done:
-		fmt.Println("Агент остановлен.")
+		logger.Log.Info("Агент остановлен.")
 	case <-time.After(30 * time.Second):
-		fmt.Println("Таймаут при остановке агента (30с). Принудительный выход.")
+		logger.Log.Warn("Таймаут при остановке агента (30с). Принудительный выход.")
 
 	}
 

@@ -1,25 +1,71 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
+	"github.com/Meowizz/metrics-collector/internal/audit"
 	models "github.com/Meowizz/metrics-collector/internal/model"
 	"github.com/Meowizz/metrics-collector/internal/repository"
 	"github.com/go-chi/chi/v5"
 )
 
+// AuditSubject — интерфейс для уведомления об изменении метрик.
+type AuditSubject interface {
+	Notify(event audit.Event, ctx context.Context)
+}
+
+// MetricsHandler — HTTP-хендлер для приёма, хранения и получения метрик.
+// Поддерживает форматы text/plain, JSON и батч-обновления.
 type MetricsHandler struct {
 	storage repository.Storage
+	audit   AuditSubject
 }
 
-func NewMetricsHandler(storage repository.Storage) *MetricsHandler {
-	return &MetricsHandler{storage: storage}
+// NewMetricsHandler создаёт новый MetricsHandler с указанным хранилищем
+// и опциональным субъектом аудита для уведомления об изменениях метрик.
+// Возвращает указатель на инициализированный MetricsHandler.
+func NewMetricsHandler(storage repository.Storage, auditSubject AuditSubject) *MetricsHandler {
+	return &MetricsHandler{
+		storage: storage,
+		audit:   auditSubject,
+	}
 }
 
+func getClientIP(rq *http.Request) string {
+	ip := rq.RemoteAddr
+
+	if fwd := rq.Header.Get("X-Forwarded-For"); fwd != "" {
+		ip = strings.Split(fwd, ",")[0]
+	}
+
+	if host, _, err := net.SplitHostPort(ip); err == nil {
+		return host
+	}
+	return ip
+}
+
+func (m *MetricsHandler) notifyAudit(rq *http.Request, metricNames []string, ctx context.Context) {
+	if m.audit == nil {
+		return
+	}
+
+	event := audit.Event{
+		TS:      int64(time.Now().Unix()),
+		Metrics: metricNames,
+		IP:      getClientIP(rq),
+	}
+	m.audit.Notify(event, ctx)
+}
+
+// MainPage обрабатывает GET-запросы к корню и возвращает HTML-страницу.
 func (m *MetricsHandler) MainPage(rw http.ResponseWriter, rq *http.Request) {
 	if rq.Method != http.MethodGet {
 		http.Error(rw, "Method not allowed", http.StatusMethodNotAllowed)
@@ -41,6 +87,8 @@ func (m *MetricsHandler) MainPage(rw http.ResponseWriter, rq *http.Request) {
 	rw.Write([]byte(htmlContent))
 }
 
+// UpdatePage обрабатывает POST-запросы к /update/{type}/{name}/{value}.
+// Обновляет gauge или counter метрику в хранилище.
 func (m *MetricsHandler) UpdatePage(res http.ResponseWriter, req *http.Request) {
 	log.Printf("Получен запрос: %s %s", req.Method, req.URL.Path)
 	if req.Method != http.MethodPost {
@@ -61,6 +109,7 @@ func (m *MetricsHandler) UpdatePage(res http.ResponseWriter, req *http.Request) 
 			return
 		}
 		m.storage.UpdateGauge(metricName, value)
+		m.notifyAudit(req, []string{metricName}, req.Context())
 
 	case "counter":
 		value, err := strconv.ParseInt(valueStr, 10, 64)
@@ -70,6 +119,7 @@ func (m *MetricsHandler) UpdatePage(res http.ResponseWriter, req *http.Request) 
 			return
 		}
 		m.storage.UpdateCounter(metricName, value)
+		m.notifyAudit(req, []string{metricName}, req.Context())
 
 	default:
 		http.Error(res, "Unknown metrics", http.StatusBadRequest)
@@ -78,6 +128,8 @@ func (m *MetricsHandler) UpdatePage(res http.ResponseWriter, req *http.Request) 
 	res.WriteHeader(http.StatusOK)
 }
 
+// GetMetricValue обрабатывает GET-запросы к /value/{type}/{name}.
+// Возвращает значение метрики в текстовом формате.
 func (m *MetricsHandler) GetMetricValue(rw http.ResponseWriter, req *http.Request) {
 	metricType := chi.URLParam(req, "type")
 	metricName := chi.URLParam(req, "name")
@@ -111,15 +163,17 @@ func (m *MetricsHandler) GetMetricValue(rw http.ResponseWriter, req *http.Reques
 	}
 }
 
-func (m *MetricsHandler) UpdateMetricJSON(rw http.ResponseWriter, rq *http.Request) {
-	if rq.Method != http.MethodPost || rq.Header.Get("Content-Type") != "application/json" {
+// UpdateMetricJSON обрабатывает POST-запросы к /update в формате JSON.
+// Обновляет gauge или counter метрику и возвращает подтверждение.
+func (m *MetricsHandler) UpdateMetricJSON(rw http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodPost || req.Header.Get("Content-Type") != "application/json" {
 		http.Error(rw, "Not allowed method or invalid Content-Type", http.StatusMethodNotAllowed)
 		return
 	}
 
 	var reqMetric models.Metrics
 
-	if err := json.NewDecoder(rq.Body).Decode(&reqMetric); err != nil {
+	if err := json.NewDecoder(req.Body).Decode(&reqMetric); err != nil {
 		http.Error(rw, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
@@ -140,6 +194,7 @@ func (m *MetricsHandler) UpdateMetricJSON(rw http.ResponseWriter, rq *http.Reque
 			return
 		}
 		resp.Value = reqMetric.Value
+		m.notifyAudit(req, []string{reqMetric.ID}, req.Context())
 	case models.Counter:
 		if reqMetric.Delta == nil {
 			http.Error(rw, "Value is required for counter", http.StatusUnprocessableEntity)
@@ -150,6 +205,7 @@ func (m *MetricsHandler) UpdateMetricJSON(rw http.ResponseWriter, rq *http.Reque
 			return
 		}
 		resp.Delta = reqMetric.Delta
+		m.notifyAudit(req, []string{reqMetric.ID}, req.Context())
 	default:
 		http.Error(rw, "Unsupported metric type", http.StatusUnprocessableEntity)
 		return
@@ -160,16 +216,18 @@ func (m *MetricsHandler) UpdateMetricJSON(rw http.ResponseWriter, rq *http.Reque
 	json.NewEncoder(rw).Encode(resp)
 }
 
-func (m *MetricsHandler) ValueMetricJSON(rw http.ResponseWriter, rq *http.Request) {
+// ValueMetricJSON обрабатывает POST-запросы к /value в формате JSON.
+// Возвращает значение метрики в JSON-формате.
+func (m *MetricsHandler) ValueMetricJSON(rw http.ResponseWriter, req *http.Request) {
 
-	if rq.Method != http.MethodPost || rq.Header.Get("Content-Type") != "application/json" {
+	if req.Method != http.MethodPost || req.Header.Get("Content-Type") != "application/json" {
 		http.Error(rw, "Not allowed method or invalid Content-Type", http.StatusMethodNotAllowed)
 		return
 	}
 
 	var reqMetric models.Metrics
 
-	if err := json.NewDecoder(rq.Body).Decode(&reqMetric); err != nil {
+	if err := json.NewDecoder(req.Body).Decode(&reqMetric); err != nil {
 		http.Error(rw, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
@@ -206,15 +264,18 @@ func (m *MetricsHandler) ValueMetricJSON(rw http.ResponseWriter, rq *http.Reques
 
 }
 
-func (h *MetricsHandler) Ping(w http.ResponseWriter, r *http.Request) {
-	if err := h.storage.Ping(); err != nil {
+// Ping обрабатывает GET-запросы к /ping для проверки доступности.
+func (m *MetricsHandler) Ping(w http.ResponseWriter, r *http.Request) {
+	if err := m.storage.Ping(); err != nil {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
 }
 
-func (h *MetricsHandler) UpdatesHandler(rw http.ResponseWriter, rq *http.Request) {
+// UpdatesHandler обрабатывает POST-запросы к /updates в формате JSON.
+// Принимает пакет метрик и обновляет их в хранилище.
+func (m *MetricsHandler) UpdatesHandler(rw http.ResponseWriter, rq *http.Request) {
 
 	if rq.Method != http.MethodPost {
 		http.Error(rw, "Method not allowed", http.StatusMethodNotAllowed)
@@ -238,14 +299,22 @@ func (h *MetricsHandler) UpdatesHandler(rw http.ResponseWriter, rq *http.Request
 		return
 	}
 
-	if err := h.storage.UpdateBatch(metric); err != nil {
+	if err := m.storage.UpdateBatch(metric); err != nil {
 		http.Error(rw, "Storage error", http.StatusInternalServerError)
 		return
 	}
 
+	metricNames := make([]string, len(metric))
+	for i, metric := range metric {
+		metricNames[i] = metric.ID
+	}
+	m.notifyAudit(rq, metricNames, rq.Context())
+
 	rw.Header().Set("Content-Type", "application/json")
 	rw.WriteHeader(http.StatusOK)
 }
+
+// RegisterRouters регистрирует все HTTP-маршруты хендлера.
 func (m *MetricsHandler) RegisterRouters(r chi.Router) {
 	r.Get("/", m.MainPage)
 	r.Get("/value/{type}/{name}", m.GetMetricValue)
