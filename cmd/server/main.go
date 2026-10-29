@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/Meowizz/metrics-collector/internal/audit"
@@ -19,6 +20,8 @@ import (
 func main() {
 	//storage := repository.NewMemStorage()
 	//handler := handler.NewMetricsHandler(storage)
+
+	printBuildInfo(os.Stdout)
 
 	cfg := ParseFlag()
 
