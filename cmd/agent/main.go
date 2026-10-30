@@ -12,10 +12,17 @@ import (
 	"github.com/Meowizz/metrics-collector/internal/collector"
 	"github.com/Meowizz/metrics-collector/internal/logger"
 	"github.com/Meowizz/metrics-collector/internal/sender"
+	"github.com/Meowizz/metrics-collector/pkg/build"
+)
+
+var (
+	buildVersion string
+	buildDate    string
+	buildCommit  string
 )
 
 func main() {
-	printBuildInfo(os.Stdout)
+	build.PrintBuildInfo(os.Stdout, buildVersion, buildDate, buildCommit)
 
 	cfg := ParseFlag()
 

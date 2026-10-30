@@ -12,16 +12,23 @@ import (
 	"github.com/Meowizz/metrics-collector/internal/logger"
 	appMiddleware "github.com/Meowizz/metrics-collector/internal/middleware"
 	"github.com/Meowizz/metrics-collector/internal/repository"
+	"github.com/Meowizz/metrics-collector/pkg/build"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
+)
+
+var (
+	buildVersion string
+	buildDate    string
+	buildCommit  string
 )
 
 func main() {
 	//storage := repository.NewMemStorage()
 	//handler := handler.NewMetricsHandler(storage)
 
-	printBuildInfo(os.Stdout)
+	build.PrintBuildInfo(os.Stdout, buildVersion, buildDate, buildCommit)
 
 	cfg := ParseFlag()
 

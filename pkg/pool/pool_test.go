@@ -28,3 +28,15 @@ func TestPool(t *testing.T) {
 		t.Errorf("ожидали count = 0, получили %d", clean.count)
 	}
 }
+
+func TestPutNilPointer(t *testing.T) {
+	p := New(func() *testObject {
+		return &testObject{}
+	})
+
+	p.Put(nil)
+
+	if got := p.Get(); got == nil {
+		t.Error("Get вернул nil, ожидали объект из create")
+	}
+}
