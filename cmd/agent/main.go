@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"sync"
@@ -12,14 +12,22 @@ import (
 	"github.com/Meowizz/metrics-collector/internal/collector"
 	"github.com/Meowizz/metrics-collector/internal/logger"
 	"github.com/Meowizz/metrics-collector/internal/sender"
+	"github.com/Meowizz/metrics-collector/pkg/build"
+)
+
+var (
+	buildVersion string
+	buildDate    string
+	buildCommit  string
 )
 
 func main() {
+	build.PrintBuildInfo(os.Stdout, buildVersion, buildDate, buildCommit)
+
 	cfg := ParseFlag()
 
 	if err := logger.Initialize("info"); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)
-		os.Exit(1)
+		log.Fatalf("Failed to initialize logger: %v", err)
 	}
 
 	c := collector.NewCollector()
@@ -61,6 +69,7 @@ func main() {
 
 	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		ticker := time.NewTicker(time.Duration(cfg.ReportInterval) * time.Second)
 		defer ticker.Stop()
 
