@@ -2,24 +2,29 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/format"
-	"go/parser"
 	"go/token"
 	"go/types"
-	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"text/template"
+
+	"golang.org/x/tools/go/packages"
 )
 
 const (
 	rootDir = "."
 	outFile = "reset.gen.go"
+
+	loadMode = packages.NeedName | packages.NeedFiles | packages.NeedCompiledGoFiles |
+		packages.NeedImports | packages.NeedDeps | packages.NeedTypes |
+		packages.NeedSyntax | packages.NeedTypesInfo
 )
 
 const resetTemplate = `
@@ -61,6 +66,7 @@ type field struct {
 	Kind string
 	Zero string
 }
+
 type structInfo struct {
 	Name   string
 	Fields []field
@@ -68,79 +74,97 @@ type structInfo struct {
 
 type pkgInfo struct {
 	Package string
+	Dir     string
 	Structs []*structInfo
 }
 
 func main() {
-	pkgs := map[string]*pkgInfo{}
+	if err := run(rootDir); err != nil {
+		log.Fatal(err)
+	}
+}
 
-	fset := token.NewFileSet()
-	err := filepath.WalkDir(rootDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			name := d.Name()
-			if path != rootDir && strings.HasPrefix(name, ".") {
-				return filepath.SkipDir
+// run генерирует reset.gen.go для всех пакетов модуля в каталоге root.
+// Файлы записываются только после успешной обработки всех пакетов.
+//
+// Шаблон ./... сам пропускает каталоги testdata и каталоги, начинающиеся с "." или "_".
+func run(root string) error {
+	pkgs, err := packages.Load(&packages.Config{Mode: loadMode, Dir: root}, "./...")
+	if err != nil {
+		return fmt.Errorf("load packages: %w", err)
+	}
+
+	var loadErrs []error
+	for _, pkg := range pkgs {
+		for _, e := range pkg.Errors {
+			// Ошибки типов здесь допустимы: при первом запуске код может вызывать
+			// ещё не сгенерированный Reset. Неразрешённый тип поля ловит buildFields.
+			if e.Kind != packages.TypeError {
+				loadErrs = append(loadErrs, fmt.Errorf("%s: %s", pkg.PkgPath, e.Msg))
 			}
-			return nil
 		}
+	}
+	if len(loadErrs) > 0 {
+		return errors.Join(loadErrs...)
+	}
 
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") || d.Name() == "reset.gen.go" {
-			return nil
-		}
-
-		file, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
+	var infos []*pkgInfo
+	for _, pkg := range pkgs {
+		structs, err := findStructs(pkg)
 		if err != nil {
-			fmt.Printf("parse %s: %v\n", path, err)
-			return nil
+			return fmt.Errorf("%s: %w", pkg.PkgPath, err)
 		}
-		dir := filepath.Dir(path)
-		ast.Inspect(file, func(n ast.Node) bool {
-			genDecl, ok := n.(*ast.GenDecl)
+		if len(structs) > 0 {
+			infos = append(infos, &pkgInfo{
+				Package: pkg.Name,
+				Dir:     filepath.Dir(pkg.GoFiles[0]),
+				Structs: structs,
+			})
+		}
+	}
+
+	for _, p := range infos {
+		if err := generate(p); err != nil {
+			return fmt.Errorf("%s: %w", p.Dir, err)
+		}
+	}
+	return nil
+}
+
+// findStructs возвращает структуры пакетного уровня с маркером generate:reset.
+func findStructs(pkg *packages.Package) ([]*structInfo, error) {
+	var structs []*structInfo
+	for _, file := range pkg.Syntax {
+		for _, decl := range file.Decls {
+			genDecl, ok := decl.(*ast.GenDecl)
 			if !ok || genDecl.Tok != token.TYPE {
-				return true
+				continue
 			}
-
 			for _, spec := range genDecl.Specs {
 				typeSpec, ok := spec.(*ast.TypeSpec)
 				if !ok {
 					continue
 				}
 				st, isStruct := typeSpec.Type.(*ast.StructType)
-				if !isStruct {
+				if !isStruct || !hasMarker(genDecl.Doc, typeSpec.Doc) {
 					continue
 				}
-				if !hasMarker(genDecl.Doc, typeSpec.Doc) {
-					continue
+				name := typeSpec.Name.Name
+				if typeSpec.TypeParams != nil {
+					return nil, fmt.Errorf("struct %s: generic structs are not supported", name)
 				}
-				p := pkgs[dir]
-				if p == nil {
-					p = &pkgInfo{Package: file.Name.Name}
-					pkgs[dir] = p
+				fields, err := buildFields(st, pkg.TypesInfo)
+				if err != nil {
+					return nil, fmt.Errorf("struct %s: %w", name, err)
 				}
-				p.Structs = append(p.Structs, &structInfo{Name: typeSpec.Name.Name, Fields: buildFields(st)})
+				structs = append(structs, &structInfo{Name: name, Fields: fields})
 			}
-			return false
-		})
-
-		return nil
-	})
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	for dir, p := range pkgs {
-		if err := generate(dir, p); err != nil {
-			log.Fatalf("%s: %v", dir, err)
 		}
 	}
+	return structs, nil
 }
 
 func hasMarker(groups ...*ast.CommentGroup) bool {
-
 	for _, group := range groups {
 		if group == nil {
 			continue
@@ -154,25 +178,36 @@ func hasMarker(groups ...*ast.CommentGroup) bool {
 	return false
 }
 
-func buildFields(st *ast.StructType) []field {
+func buildFields(st *ast.StructType, info *types.Info) ([]field, error) {
 	var fields []field
 
 	for _, f := range st.Fields.List {
-		kind, zero := classify(f.Type)
-		if kind == "" {
+		names := fieldNames(f)
+		if len(names) == 0 {
 			continue
 		}
-		for _, name := range fieldNames(f) {
+
+		kind, zero := classifyType(info.TypeOf(f.Type))
+		if kind == "" {
+			return nil, fmt.Errorf("field %s: unresolved or unsupported type %s",
+				strings.Join(names, ", "), types.ExprString(f.Type))
+		}
+
+		for _, name := range names {
 			fields = append(fields, field{Name: name, Kind: kind, Zero: zero})
 		}
 	}
-	return fields
+	return fields, nil
 }
 
 func fieldNames(f *ast.Field) []string {
 	if len(f.Names) == 0 {
-		t := strings.TrimLeft(types.ExprString(f.Type), "*")
-		return []string{t[strings.LastIndex(t, ".")+1:]}
+		t := types.ExprString(f.Type)
+		t = strings.TrimLeft(t, "*")
+		if idx := strings.LastIndex(t, "."); idx != -1 {
+			t = t[idx+1:]
+		}
+		return []string{t}
 	}
 	var names []string
 	for _, name := range f.Names {
@@ -183,43 +218,56 @@ func fieldNames(f *ast.Field) []string {
 	return names
 }
 
-var zeroValues = map[string]string{
-	"bool": "false", "string": `""`,
-	"int": "0", "int8": "0", "int16": "0", "int32": "0", "int64": "0",
-	"uint": "0", "uint8": "0", "uint16": "0", "uint32": "0", "uint64": "0",
-	"uintptr": "0", "byte": "0", "rune": "0",
-	"float32": "0", "float64": "0",
-	"error": "nil", "any": "nil",
-}
+// classifyType выбирает способ сброса по базовому типу, поэтому time.Duration и
+// type ID int обрабатываются как числа, а не как вложенные структуры.
+// Пустой kind означает, что тип не разрешён или не поддерживается.
+func classifyType(typ types.Type) (kind, zero string) {
+	if typ == nil {
+		return "", ""
+	}
 
-func classify(typ ast.Expr) (kind, zero string) {
-	switch t := typ.(type) {
-	case *ast.Ident:
-		if z, ok := zeroValues[t.Name]; ok {
-			return "primitive", z
+	switch u := typ.Underlying().(type) {
+	case *types.Basic:
+		if zero := getBasicZero(u.Kind()); zero != "" {
+			return "primitive", zero
 		}
-		return "nested", ""
-	case *ast.SelectorExpr:
-		return "nested", ""
-	case *ast.ArrayType:
-		if t.Len == nil {
-			return "slice", ""
-		}
+	case *types.Interface, *types.Signature, *types.Chan:
+		return "primitive", "nil"
+	case *types.Slice:
+		return "slice", ""
+	case *types.Array:
 		return "array", ""
-	case *ast.MapType:
+	case *types.Map:
 		return "map", ""
-	case *ast.StarExpr:
-		if id, ok := t.X.(*ast.Ident); ok {
-			if z, ok := zeroValues[id.Name]; ok {
-				return "ptr", z
+	case *types.Pointer:
+		if b, ok := u.Elem().Underlying().(*types.Basic); ok {
+			if zero := getBasicZero(b.Kind()); zero != "" {
+				return "ptr", zero
 			}
+			return "", ""
 		}
 		return "ptrnested", ""
+	case *types.Struct:
+		return "nested", ""
 	}
 	return "", ""
 }
 
-func generate(dir string, pkg *pkgInfo) error {
+func getBasicZero(kind types.BasicKind) string {
+	switch {
+	case kind == types.Bool:
+		return `false`
+	case kind == types.String:
+		return `""`
+	case kind >= types.Int && kind <= types.Complex128:
+		return "0"
+	case kind == types.UnsafePointer:
+		return "nil"
+	}
+	return ""
+}
+
+func generate(pkg *pkgInfo) error {
 	sort.Slice(pkg.Structs, func(i, j int) bool {
 		return pkg.Structs[i].Name < pkg.Structs[j].Name
 	})
@@ -231,5 +279,5 @@ func generate(dir string, pkg *pkgInfo) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, outFile), src, 0644)
+	return os.WriteFile(filepath.Join(pkg.Dir, outFile), src, 0644)
 }
