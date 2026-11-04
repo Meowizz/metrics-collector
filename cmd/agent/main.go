@@ -10,6 +10,7 @@ import (
 
 	"github.com/Meowizz/metrics-collector/internal/agent"
 	"github.com/Meowizz/metrics-collector/internal/collector"
+	"github.com/Meowizz/metrics-collector/internal/crypto"
 	"github.com/Meowizz/metrics-collector/internal/logger"
 	"github.com/Meowizz/metrics-collector/internal/sender"
 	"github.com/Meowizz/metrics-collector/pkg/build"
@@ -34,6 +35,14 @@ func main() {
 
 	address := "http://" + cfg.Addr
 	s := sender.NewSender(address, cfg.Key)
+
+	if cfg.CryptoKey != "" {
+		publicKey, err := crypto.LoadPublicKey(cfg.CryptoKey)
+		if err != nil {
+			log.Fatalf("failed to load public key: %v", err)
+		}
+		s.EnableEncryption(publicKey)
+	}
 
 	wp := agent.NewWorkerPool(s, cfg.RateLimiter, logger.Log)
 

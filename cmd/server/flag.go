@@ -19,6 +19,7 @@ type ConfigAddr struct {
 	Key             string `env:"KEY" envDefault:""`
 	AuditFile       string `env:"AUDIT_FILE" envDefault:""`
 	AuditURL        string `env:"AUDIT_URL" envDefault:""`
+	CryptoKey       string `env:"CRYPTO_KEY" envDefault:""`
 }
 
 func ParseFlag() *ConfigAddr {
@@ -29,9 +30,9 @@ func ParseFlag() *ConfigAddr {
 	}
 
 	var (
-		flagAddr, flagLogLevel, flagFileStoragePath, flagDatabaseDSN, flagKey, flagAuditFile, flagAuditURL string
-		flagStoreInterval                                                                                  int
-		flagRestore                                                                                        bool
+		flagAddr, flagLogLevel, flagFileStoragePath, flagDatabaseDSN, flagKey, flagAuditFile, flagAuditURL, flagCryptoKey string
+		flagStoreInterval                                                                                                 int
+		flagRestore                                                                                                       bool
 	)
 
 	flag.StringVar(&flagAddr, "a", "", "Net address host:port")
@@ -43,6 +44,7 @@ func ParseFlag() *ConfigAddr {
 	flag.StringVar(&flagKey, "k", "", "Super Secret Key")
 	flag.StringVar(&flagAuditFile, "audit-file", "", "Audit name file")
 	flag.StringVar(&flagAuditURL, "audit-url", "", "URL for audit")
+	flag.StringVar(&flagCryptoKey, "crypto-key", "", "path to private key file (PEM)")
 
 	flag.Parse()
 
@@ -65,6 +67,9 @@ func ParseFlag() *ConfigAddr {
 
 	if flagDatabaseDSN != "" {
 		cfg.DatabaseDSN = flagDatabaseDSN
+	}
+	if flagCryptoKey != "" {
+		cfg.CryptoKey = flagCryptoKey
 	}
 
 	cfg.Key = strings.TrimSpace(cfg.Key)

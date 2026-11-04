@@ -15,6 +15,7 @@ type Config struct {
 	BatchSize      int
 	Key            string
 	RateLimiter    int
+	CryptoKey      string
 }
 
 func ParseFlag() *Config {
@@ -31,6 +32,7 @@ func ParseFlag() *Config {
 	flag.IntVar(&cfg.BatchSize, "b", 0, "batch size for sending metrics (0 = disabled)")
 	flag.StringVar(&cfg.Key, "k", cfg.Key, "super secret key")
 	flag.IntVar(&cfg.RateLimiter, "l", cfg.RateLimiter, "rate limiter for worker pool")
+	flag.StringVar(&cfg.CryptoKey, "crypto-key", cfg.CryptoKey, "path to public key file (PEM)")
 
 	flag.Parse()
 
@@ -82,6 +84,10 @@ func ParseFlag() *Config {
 			log.Fatal("Unkonwn parametr in env:RATE_LIMIT")
 		}
 		cfg.RateLimiter = rateLimiter
+	}
+
+	if envCryptoKey := os.Getenv("CRYPTO_KEY"); envCryptoKey != "" {
+		cfg.CryptoKey = envCryptoKey
 	}
 
 	return cfg

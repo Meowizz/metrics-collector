@@ -25,3 +25,7 @@ vendor/
 .vscode
 
 *.log
+
+# keygen
+cmd/keygen/keygen
+*.pem
