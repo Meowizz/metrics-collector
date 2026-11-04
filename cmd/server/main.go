@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"crypto/rsa"
 	"log"
 	"net/http"
 	"os"
 	"time"
 
 	"github.com/Meowizz/metrics-collector/internal/audit"
+	"github.com/Meowizz/metrics-collector/internal/crypto"
 	"github.com/Meowizz/metrics-collector/internal/handler"
 	"github.com/Meowizz/metrics-collector/internal/logger"
 	appMiddleware "github.com/Meowizz/metrics-collector/internal/middleware"
@@ -59,7 +61,15 @@ func main() {
 		log.Println("Using in-memory storage")
 		storage = repository.NewMemStorage()
 	}
+	var privateKey *rsa.PrivateKey
+	if cfg.CryptoKey != "" {
+		var err error
+		privateKey, err = crypto.LoadPrivateKey(cfg.CryptoKey)
+		if err != nil {
+			log.Fatalf("failed to load private key: %v", err)
+		}
 
+	}
 	if cfg.AuditFile != "" {
 		fileObs, err := audit.NewFileAuditObserver(cfg.AuditFile, logger.Log)
 		if err != nil {
@@ -119,6 +129,7 @@ func main() {
 	}
 	r.Use(middleware.Recoverer)
 	r.Use(logger.WithLogging)
+	r.Use(appMiddleware.DecryptMiddleware(privateKey))
 
 	r.With(appMiddleware.GzipMiddleware, hashMW).Get("/", handler.MainPage)
 	r.With(hashMW).Post("/update/{type}/{name}/{value}", handler.UpdatePage)
