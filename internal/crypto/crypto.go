@@ -7,6 +7,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"os"
 )
 
 // GenerateKeyRSA генерирует приватный RSA-ключ длиной keyLen бит.
@@ -46,4 +47,83 @@ func EncodeToPEM(privateKey *rsa.PrivateKey) ([]byte, []byte, error) {
 	pemPub := pem.EncodeToMemory(&blockPub)
 
 	return pemPrivate, pemPub, nil
+}
+
+// toBlockPEM читает файл filePath и возвращает первый PEM-блок из него как есть,
+// с исходным типом. Тип блока не проверяет: допустимые типы решает вызывающая функция.
+// Возвращает ошибку, если файл не читается или PEM-блок в нём не найден.
+func toBlockPEM(filePath string) (*pem.Block, error) {
+	fileByte, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("error reading file: %w", err)
+	}
+	block, _ := pem.Decode(fileByte)
+	if block == nil {
+		return nil, fmt.Errorf("no PEM block found in %s", filePath)
+	}
+	return block, nil
+}
+
+// LoadPrivateKey загружает приватный RSA-ключ сервера из PEM-файла filePath.
+// Поддерживает PKCS#1 (блок "RSA PRIVATE KEY", формат утилиты keygen)
+// и PKCS#8 (блок "PRIVATE KEY", формат openssl genrsa в OpenSSL 3).
+// Возвращает ошибку, если файл не читается, тип блока не поддерживается
+// или ключ в нём не RSA.
+func LoadPrivateKey(filePath string) (*rsa.PrivateKey, error) {
+	pemBlock, err := toBlockPEM(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("load private key: %w", err)
+	}
+	switch pemBlock.Type {
+	case "RSA PRIVATE KEY":
+		key, err := x509.ParsePKCS1PrivateKey(pemBlock.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing private key %s: %w", filePath, err)
+		}
+		return key, nil
+	case "PRIVATE KEY":
+		parsed, err := x509.ParsePKCS8PrivateKey(pemBlock.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing private key %s: %w", filePath, err)
+		}
+		key, ok := parsed.(*rsa.PrivateKey)
+		if !ok {
+			return nil, fmt.Errorf("private key %s is not RSA: %T", filePath, parsed)
+		}
+		return key, nil
+	default:
+		return nil, fmt.Errorf("unsupported private key PEM block %q in %s", pemBlock.Type, filePath)
+	}
+}
+
+// LoadPublicKey загружает публичный RSA-ключ агента из PEM-файла filePath.
+// Поддерживает PKIX (блок "PUBLIC KEY", формат утилиты keygen и openssl rsa -pubout)
+// и PKCS#1 (блок "RSA PUBLIC KEY").
+// Возвращает ошибку, если файл не читается, тип блока не поддерживается
+// или ключ в нём не RSA.
+func LoadPublicKey(filePath string) (*rsa.PublicKey, error) {
+	pemBlock, err := toBlockPEM(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("load public key: %w", err)
+	}
+	switch pemBlock.Type {
+	case "RSA PUBLIC KEY":
+		key, err := x509.ParsePKCS1PublicKey(pemBlock.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing public key %s: %w", filePath, err)
+		}
+		return key, nil
+	case "PUBLIC KEY":
+		parsed, err := x509.ParsePKIXPublicKey(pemBlock.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing public key %s: %w", filePath, err)
+		}
+		key, ok := parsed.(*rsa.PublicKey)
+		if !ok {
+			return nil, fmt.Errorf("public key %s is not RSA: %T", filePath, parsed)
+		}
+		return key, nil
+	default:
+		return nil, fmt.Errorf("unsupported public key PEM block %q in %s", pemBlock.Type, filePath)
+	}
 }
