@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 
 	models "github.com/Meowizz/metrics-collector/internal/model"
@@ -111,7 +112,7 @@ func (m *MemStorage) LoadFromFile(filepath string) error {
 }
 
 // SaveToFile сохраняет состояние метрик в JSON-файл.
-func (m *MemStorage) SaveToFile(filepath string) error {
+func (m *MemStorage) SaveToFile(path string) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -128,7 +129,11 @@ func (m *MemStorage) SaveToFile(filepath string) error {
 		state.Gauges[k] = v
 	}
 
-	file, err := os.Create(filepath)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("failed to create directory: %w", err)
+	}
+
+	file, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("failed to create file: %w", err)
 	}

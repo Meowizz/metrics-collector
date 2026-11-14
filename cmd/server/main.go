@@ -2,12 +2,18 @@ package main
 
 import (
 	"context"
+	"crypto/rsa"
+	"errors"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/Meowizz/metrics-collector/internal/audit"
+	"github.com/Meowizz/metrics-collector/internal/crypto"
 	"github.com/Meowizz/metrics-collector/internal/handler"
 	"github.com/Meowizz/metrics-collector/internal/logger"
 	appMiddleware "github.com/Meowizz/metrics-collector/internal/middleware"
@@ -38,9 +44,18 @@ func main() {
 		panic("Failed to initialized logger: " + err.Error())
 	}
 
+	// Регистрируется первым, чтобы выполниться после всех остальных defer.
+	var runErr error
+	defer func() {
+		if runErr != nil {
+			logger.Log.Fatal("Server stopped due to error")
+		}
+	}()
+
 	var storage repository.Storage
 
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	defer stop()
 
 	if cfg.DatabaseDSN != "" {
 
@@ -59,7 +74,15 @@ func main() {
 		log.Println("Using in-memory storage")
 		storage = repository.NewMemStorage()
 	}
+	var privateKey *rsa.PrivateKey
+	if cfg.CryptoKey != "" {
+		var err error
+		privateKey, err = crypto.LoadPrivateKey(cfg.CryptoKey)
+		if err != nil {
+			log.Fatalf("failed to load private key: %v", err)
+		}
 
+	}
 	if cfg.AuditFile != "" {
 		fileObs, err := audit.NewFileAuditObserver(cfg.AuditFile, logger.Log)
 		if err != nil {
@@ -88,19 +111,17 @@ func main() {
 		}
 	}
 
+	var saverWG sync.WaitGroup
 	if cfg.StoreInterval > 0 {
 		if memStore, ok := storage.(*repository.MemStorage); ok {
+			saverWG.Add(1)
 			go func() {
+				defer saverWG.Done()
 				ticker := time.NewTicker(time.Duration(cfg.StoreInterval) * time.Second)
 				defer ticker.Stop()
 				for {
 					select {
 					case <-ctx.Done():
-						if err := memStore.SaveToFile(cfg.FileStoragePath); err != nil {
-							logger.Log.Error("Ошибка финального сохранения при остановке", zap.Error(err))
-						} else {
-							logger.Log.Info("Метрики успешно сохранены перед остановкой")
-						}
 						logger.Log.Info("Горутина фонового сохранения завершена")
 						return
 
@@ -119,6 +140,7 @@ func main() {
 	}
 	r.Use(middleware.Recoverer)
 	r.Use(logger.WithLogging)
+	r.Use(appMiddleware.DecryptMiddleware(privateKey))
 
 	r.With(appMiddleware.GzipMiddleware, hashMW).Get("/", handler.MainPage)
 	r.With(hashMW).Post("/update/{type}/{name}/{value}", handler.UpdatePage)
@@ -132,9 +154,41 @@ func main() {
 
 	logger.Log.Info("Starting server", zap.String("address", cfg.Addr))
 
-	err := http.ListenAndServe(cfg.Addr, r)
-
-	if err != nil {
-		logger.Log.Fatal("Server failed", zap.Error(err))
+	server := &http.Server{
+		Addr:    cfg.Addr,
+		Handler: r,
 	}
+
+	serverErr := make(chan error, 1)
+
+	go func() {
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serverErr <- err
+		}
+	}()
+
+	select {
+	case <-ctx.Done():
+		logger.Log.Info("Shutting down server")
+	case runErr = <-serverErr:
+		logger.Log.Error("Server exited with error", zap.Error(runErr))
+
+	}
+	stop()
+
+	shutdownContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := server.Shutdown(shutdownContext); err != nil {
+		logger.Log.Error("Server shutdown failed", zap.Error(err))
+	}
+	auditSubj.Shutdown()
+	saverWG.Wait()
+	if memStore, ok := storage.(*repository.MemStorage); ok && cfg.FileStoragePath != "" {
+		if err := memStore.SaveToFile(cfg.FileStoragePath); err != nil {
+			logger.Log.Error("Failed to save metrics on shutdown", zap.Error(err))
+		} else {
+			logger.Log.Info("Metrics saved on shutdown", zap.String("path", cfg.FileStoragePath))
+		}
+	}
+	logger.Log.Info("Server stopped")
 }
