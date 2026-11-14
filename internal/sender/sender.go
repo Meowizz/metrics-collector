@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -346,5 +347,34 @@ func (r *EncryptedTransport) RoundTrip(req *http.Request) (*http.Response, error
 		return io.NopCloser(bytes.NewReader(encryptedBody)), nil
 	}
 
+	return r.nextTransport.RoundTrip(newReq)
+}
+
+// IPTransport — HTTP-транспорт, добавляющий в каждый запрос заголовок X-Real-IP
+// с IP-адресом хоста агента. По нему сервер проверяет, входит ли агент в доверенную подсеть.
+type IPTransport struct {
+	nextTransport http.RoundTripper
+	ip            net.IP
+}
+
+// SetRealIP включает передачу IP-адреса агента в заголовке X-Real-IP.
+// Оборачивает текущий транспорт клиента в IPTransport, сохраняя цепочку внутри.
+// Вызывать после EnableEncryption: тот пересобирает транспорт заново и обёртка потеряется.
+// Как и EnableEncryption, вызывать до начала отправки.
+func (s *Sender) SetRealIP(ip net.IP) {
+	s.client.Transport = &IPTransport{
+		nextTransport: s.client.Transport,
+		ip:            ip,
+	}
+}
+
+// Проверка на этапе компиляции: IPTransport реализует http.RoundTripper.
+var _ http.RoundTripper = (*IPTransport)(nil)
+
+// RoundTrip передаёт следующему транспорту клон запроса с заголовком X-Real-IP.
+// Исходный запрос не меняет.
+func (r *IPTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	newReq := req.Clone(req.Context())
+	newReq.Header.Set("X-Real-IP", r.ip.String())
 	return r.nextTransport.RoundTrip(newReq)
 }

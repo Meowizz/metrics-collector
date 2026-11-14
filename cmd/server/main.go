@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"net/netip"
 	"os"
 	"os/signal"
 	"sync"
@@ -97,6 +98,15 @@ func main() {
 		auditSubj.Attach(httpObs)
 	}
 
+	var subnet netip.Prefix
+	if cfg.TrustedSubnet != "" {
+		var err error
+		subnet, err = netip.ParsePrefix(cfg.TrustedSubnet)
+		if err != nil {
+			log.Fatalf("Failed to parse trusted subnet: %v", err)
+		}
+	}
+
 	handler := handler.NewMetricsHandler(storage, auditSubj)
 
 	if cfg.Restore {
@@ -140,6 +150,7 @@ func main() {
 	}
 	r.Use(middleware.Recoverer)
 	r.Use(logger.WithLogging)
+	r.Use(appMiddleware.CheckSubnetMiddleware(subnet))
 	r.Use(appMiddleware.DecryptMiddleware(privateKey))
 
 	r.With(appMiddleware.GzipMiddleware, hashMW).Get("/", handler.MainPage)

@@ -24,6 +24,7 @@ type ConfigAddr struct {
 	AuditFile       string `env:"AUDIT_FILE"`
 	AuditURL        string `env:"AUDIT_URL"`
 	CryptoKey       string `env:"CRYPTO_KEY"`
+	TrustedSubnet   string `env:"TRUSTED_SUBNET"`
 }
 
 type fileConfig struct {
@@ -37,6 +38,7 @@ type fileConfig struct {
 	AuditFile     *string `json:"audit_file"`
 	AuditURL      *string `json:"audit_url"`
 	CryptoKey     *string `json:"crypto_key"`
+	TrustedSubnet *string `json:"trusted_subnet"`
 }
 
 func defaultConfig() *ConfigAddr {
@@ -58,9 +60,9 @@ func ParseFlag() *ConfigAddr {
 
 func parseConfig(name string, args []string, environ map[string]string) (*ConfigAddr, error) {
 	var (
-		flagAddr, flagLogLevel, flagFileStoragePath, flagDatabaseDSN, flagKey, flagAuditFile, flagAuditURL, flagCryptoKey, flagConfig string
-		flagStoreInterval                                                                                                             int
-		flagRestore                                                                                                                   bool
+		flagAddr, flagLogLevel, flagFileStoragePath, flagDatabaseDSN, flagKey, flagAuditFile, flagAuditURL, flagCryptoKey, flagTrustedSubnet, flagConfig string
+		flagStoreInterval                                                                                                                                int
+		flagRestore                                                                                                                                      bool
 	)
 
 	fs := flag.NewFlagSet(name, flag.ExitOnError)
@@ -74,6 +76,7 @@ func parseConfig(name string, args []string, environ map[string]string) (*Config
 	fs.StringVar(&flagAuditFile, "audit-file", "", "Audit name file")
 	fs.StringVar(&flagAuditURL, "audit-url", "", "URL for audit")
 	fs.StringVar(&flagCryptoKey, "crypto-key", "", "path to private key file (PEM)")
+	fs.StringVar(&flagTrustedSubnet, "t", "", "trusted subnet in CIDR notation")
 	fs.StringVar(&flagConfig, "c", "", "path to JSON config file")
 	fs.StringVar(&flagConfig, "config", "", "path to JSON config file (same as -c)")
 
@@ -125,6 +128,9 @@ func parseConfig(name string, args []string, environ map[string]string) (*Config
 	}
 	if flagAuditURL != "" {
 		cfg.AuditURL = flagAuditURL
+	}
+	if flagTrustedSubnet != "" {
+		cfg.TrustedSubnet = flagTrustedSubnet
 	}
 
 	cfg.Key = strings.TrimSpace(cfg.Key)
@@ -179,6 +185,9 @@ func applyFile(cfg *ConfigAddr, path string) error {
 	}
 	if fc.CryptoKey != nil {
 		cfg.CryptoKey = *fc.CryptoKey
+	}
+	if fc.TrustedSubnet != nil {
+		cfg.TrustedSubnet = *fc.TrustedSubnet
 	}
 	return nil
 }

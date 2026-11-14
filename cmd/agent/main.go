@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"sync"
@@ -14,6 +15,7 @@ import (
 	"github.com/Meowizz/metrics-collector/internal/logger"
 	"github.com/Meowizz/metrics-collector/internal/sender"
 	"github.com/Meowizz/metrics-collector/pkg/build"
+	"go.uber.org/zap"
 )
 
 var (
@@ -43,6 +45,20 @@ func main() {
 		}
 		s.EnableEncryption(publicKey)
 	}
+
+	conn, err := net.Dial("udp", cfg.Addr)
+	if err != nil {
+		log.Fatalf("failed to determine agent IP: %v", err)
+	}
+
+	addr := conn.LocalAddr().(*net.UDPAddr).IP
+
+	err = conn.Close()
+	if err != nil {
+		logger.Log.Warn("failed to close connection", zap.Error(err))
+	}
+
+	s.SetRealIP(addr)
 
 	wp := agent.NewWorkerPool(s, cfg.RateLimiter, logger.Log)
 

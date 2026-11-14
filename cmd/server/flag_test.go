@@ -118,6 +118,32 @@ func TestParseConfigFlagZeroStoreInterval(t *testing.T) {
 	}
 }
 
+func TestParseConfigTrustedSubnet(t *testing.T) {
+	path := writeConfig(t, `{"trusted_subnet": "10.0.0.0/8"}`)
+
+	// Файл < env < флаг.
+	for _, tc := range []struct {
+		name    string
+		args    []string
+		environ map[string]string
+		want    string
+	}{
+		{"из файла", []string{"-c", path}, nil, "10.0.0.0/8"},
+		{"env перекрывает файл", []string{"-c", path}, map[string]string{"TRUSTED_SUBNET": "172.16.0.0/12"}, "172.16.0.0/12"},
+		{"флаг перекрывает env", []string{"-c", path, "-t", "192.168.0.0/16"}, map[string]string{"TRUSTED_SUBNET": "172.16.0.0/12"}, "192.168.0.0/16"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg, err := parseConfig("server", tc.args, tc.environ)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.TrustedSubnet != tc.want {
+				t.Errorf("TrustedSubnet = %q, want %q", cfg.TrustedSubnet, tc.want)
+			}
+		})
+	}
+}
+
 func TestParseConfigFlagOverridesEnvConfigPath(t *testing.T) {
 	fromEnv := writeConfig(t, `{"address": "env-file:1"}`)
 	fromFlag := writeConfig(t, `{"address": "flag-file:1"}`)
