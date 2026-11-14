@@ -94,7 +94,7 @@ func parseConfig(name string, args []string, environ map[string]string) (*Config
 	}
 
 	if err := env.Parse(cfg, env.Options{Environment: environ}); err != nil {
-		return nil, fmt.Errorf("Error parsing environment variables: %w", err)
+		return nil, fmt.Errorf("error parsing environment variables: %w", err)
 	}
 
 	if flagAddr != "" {
@@ -132,7 +132,7 @@ func parseConfig(name string, args []string, environ map[string]string) (*Config
 		filePath := strings.TrimPrefix(cfg.Key, "@")
 		keyBytes, err := os.ReadFile(filePath)
 		if err != nil {
-			return nil, fmt.Errorf("Не удалось прочитать файл ключа %s: %w", filePath, err)
+			return nil, fmt.Errorf("yе удалось прочитать файл ключа %s: %w", filePath, err)
 		}
 		cfg.Key = strings.TrimSpace(string(keyBytes))
 	}
