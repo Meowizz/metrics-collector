@@ -103,7 +103,9 @@ func parseConfig(name string, args []string, environ map[string]string) (*Config
 	if flagLogLevel != "" {
 		cfg.LogLevel = flagLogLevel
 	}
-	if flagStoreInterval != 0 {
+	setFlags := make(map[string]bool)
+	fs.Visit(func(f *flag.Flag) { setFlags[f.Name] = true })
+	if setFlags["i"] {
 		cfg.StoreInterval = flagStoreInterval
 	}
 	if flagFileStoragePath != "" {

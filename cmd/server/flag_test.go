@@ -108,6 +108,16 @@ func TestParseConfigEnvOverridesFileFalse(t *testing.T) {
 	}
 }
 
+func TestParseConfigFlagZeroStoreInterval(t *testing.T) {
+	cfg, err := parseConfig("server", []string{"-i", "0"}, map[string]string{"STORE_INTERVAL": "5"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.StoreInterval != 0 {
+		t.Errorf("StoreInterval = %d, want 0: явный -i 0 должен перекрывать env", cfg.StoreInterval)
+	}
+}
+
 func TestParseConfigFlagOverridesEnvConfigPath(t *testing.T) {
 	fromEnv := writeConfig(t, `{"address": "env-file:1"}`)
 	fromFlag := writeConfig(t, `{"address": "flag-file:1"}`)

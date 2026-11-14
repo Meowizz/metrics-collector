@@ -47,7 +47,7 @@ func main() {
 	wp := agent.NewWorkerPool(s, cfg.RateLimiter, logger.Log)
 
 	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
 	stop := make(chan struct{})
 	var wg sync.WaitGroup
@@ -85,23 +85,10 @@ func main() {
 		for {
 			select {
 			case <-stop:
+				reportMetrics(c, wp, cfg.BatchSize)
 				return
 			case <-ticker.C:
-				metrics := c.GetMetrics()
-				if len(metrics) > 0 {
-					if cfg.BatchSize > 0 {
-						for i := 0; i < len(metrics); i += cfg.BatchSize {
-							end := i + cfg.BatchSize
-							if end > len(metrics) {
-								end = len(metrics)
-							}
-							chunk := metrics[i:end]
-							wp.Ingest(chunk)
-						}
-					} else {
-						wp.Ingest(metrics)
-					}
-				}
+				reportMetrics(c, wp, cfg.BatchSize)
 			}
 		}
 	}()
@@ -127,4 +114,20 @@ func main() {
 
 	}
 
+}
+
+// reportMetrics передаёт текущие метрики в пул воркеров, разбивая их на батчи по batchSize.
+func reportMetrics(c *collector.Collector, wp *agent.WorkerPool, batchSize int) {
+	metrics := c.GetMetrics()
+	if len(metrics) == 0 {
+		return
+	}
+	if batchSize <= 0 {
+		wp.Ingest(metrics)
+		return
+	}
+	for i := 0; i < len(metrics); i += batchSize {
+		end := min(i+batchSize, len(metrics))
+		wp.Ingest(metrics[i:end])
+	}
 }
