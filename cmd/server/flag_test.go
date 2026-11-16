@@ -118,6 +118,16 @@ func TestParseConfigFlagZeroStoreInterval(t *testing.T) {
 	}
 }
 
+func TestParseConfigFlagKeyOverridesEnv(t *testing.T) {
+	cfg, err := parseConfig("server", []string{"-k", "flagkey"}, map[string]string{"KEY": "envkey"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Key != "flagkey" {
+		t.Errorf("Key = %q, want flagkey", cfg.Key)
+	}
+}
+
 func TestParseConfigFlagOverridesEnvConfigPath(t *testing.T) {
 	fromEnv := writeConfig(t, `{"address": "env-file:1"}`)
 	fromFlag := writeConfig(t, `{"address": "flag-file:1"}`)

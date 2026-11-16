@@ -44,6 +44,34 @@ git fetch template && git checkout template/v2 .github
 - **Layered Architecture**
 
 
+## Шифрование
+
+Агент шифрует тела запросов публичным RSA-ключом, сервер расшифровывает их приватным.
+Шифрование включается, только если ключи заданы, поэтому сначала сгенерируйте пару:
+
+```bash
+go run ./cmd/keygen
+# или с явными путями и длиной ключа (по умолчанию 2048)
+go run ./cmd/keygen -private-key ./private-key.pem -public-key ./public-key.pem -length 4096
+```
+
+По умолчанию утилита создаёт в текущем каталоге `private-key.pem` (права 0600) и `public-key.pem` (0644).
+Существующие файлы она не перезаписывает и в этом случае завершается с ошибкой.
+
+| Файл | Кому | Как передать |
+|---|---|---|
+| `private-key.pem` | серверу | `-crypto-key`, `CRYPTO_KEY` или `crypto_key` в JSON-конфиге |
+| `public-key.pem` | агенту | `-crypto-key`, `CRYPTO_KEY` или `crypto_key` в JSON-конфиге |
+
+```bash
+go run ./cmd/server -crypto-key ./private-key.pem
+go run ./cmd/agent  -crypto-key ./public-key.pem
+```
+
+Приватный ключ должен оставаться только на сервере. Файлы `*.pem` и `config.json` исключены через `.gitignore`.
+
+Сервер без ключа принимает незашифрованные запросы. На зашифрованный запрос он отвечает 400.
+Если ключ на сервере задан, незашифрованные запросы он тоже принимает.
 
 ## Оптимизация памяти (pprof)
 

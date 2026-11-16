@@ -117,6 +117,9 @@ func parseConfig(name string, args []string, environ map[string]string) (*Config
 	if flagDatabaseDSN != "" {
 		cfg.DatabaseDSN = flagDatabaseDSN
 	}
+	if flagKey != "" {
+		cfg.Key = flagKey
+	}
 	if flagCryptoKey != "" {
 		cfg.CryptoKey = flagCryptoKey
 	}
