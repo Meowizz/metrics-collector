@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -144,6 +146,16 @@ func TestParseConfigTrustedSubnet(t *testing.T) {
 	}
 }
 
+func TestParseConfigFlagKeyOverridesEnv(t *testing.T) {
+	cfg, err := parseConfig("server", []string{"-k", "flagkey"}, map[string]string{"KEY": "envkey"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Key != "flagkey" {
+		t.Errorf("Key = %q, want flagkey", cfg.Key)
+	}
+}
+
 func TestParseConfigFlagOverridesEnvConfigPath(t *testing.T) {
 	fromEnv := writeConfig(t, `{"address": "env-file:1"}`)
 	fromFlag := writeConfig(t, `{"address": "flag-file:1"}`)
@@ -175,5 +187,22 @@ func TestParseConfigFileErrors(t *testing.T) {
 
 	if _, err := parseConfig("server", []string{"-c", "/nonexistent/server.json"}, map[string]string{}); err == nil {
 		t.Error("ожидалась ошибка для отсутствующего файла")
+	}
+}
+
+func TestExampleConfig(t *testing.T) {
+	path := filepath.Join("..", "..", "config.server.example.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	var fc fileConfig
+	if err := dec.Decode(&fc); err != nil {
+		t.Fatalf("пример %s не совпадает с fileConfig: %v", path, err)
+	}
+	if _, err := parseConfig("server", []string{"-c", path}, nil); err != nil {
+		t.Fatal(err)
 	}
 }

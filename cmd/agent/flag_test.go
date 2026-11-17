@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -83,5 +85,22 @@ func TestParseConfigFileErrors(t *testing.T) {
 	}
 	if _, err := parseConfig("agent", nil, map[string]string{"POLL_INTERVAL": "x"}); err == nil {
 		t.Error("POLL_INTERVAL=x: ожидалась ошибка")
+	}
+}
+
+func TestExampleConfig(t *testing.T) {
+	path := filepath.Join("..", "..", "config.agent.example.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	var fc fileConfig
+	if err := dec.Decode(&fc); err != nil {
+		t.Fatalf("пример %s не совпадает с fileConfig: %v", path, err)
+	}
+	if _, err := parseConfig("agent", []string{"-c", path}, nil); err != nil {
+		t.Fatal(err)
 	}
 }
