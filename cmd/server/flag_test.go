@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -159,5 +161,22 @@ func TestParseConfigFileErrors(t *testing.T) {
 
 	if _, err := parseConfig("server", []string{"-c", "/nonexistent/server.json"}, map[string]string{}); err == nil {
 		t.Error("ожидалась ошибка для отсутствующего файла")
+	}
+}
+
+func TestExampleConfig(t *testing.T) {
+	path := filepath.Join("..", "..", "config.server.example.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	var fc fileConfig
+	if err := dec.Decode(&fc); err != nil {
+		t.Fatalf("пример %s не совпадает с fileConfig: %v", path, err)
+	}
+	if _, err := parseConfig("server", []string{"-c", path}, nil); err != nil {
+		t.Fatal(err)
 	}
 }

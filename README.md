@@ -44,6 +44,26 @@ git fetch template && git checkout template/v2 .github
 - **Layered Architecture**
 
 
+## Файл конфигурации
+
+Сервер и агент читают настройки из JSON-файла, путь к которому задаётся флагом `-c` (`-config`)
+или переменной `CONFIG`. Примеры со всеми поддерживаемыми полями:
+[`config.server.example.json`](config.server.example.json) и [`config.agent.example.json`](config.agent.example.json).
+
+```bash
+cp config.server.example.json config.server.json
+go run ./cmd/server -c config.server.json
+```
+
+- Интервалы (`store_interval`, `report_interval`, `poll_interval`) задаются длительностью вида `"10s"`, кратной секунде.
+- Пустая строка выключает опцию: `"database_dsn": ""` — хранение в памяти, `"crypto_key": ""` — без шифрования.
+  В примерах `crypto_key` указывает на ключи из раздела [«Шифрование»](#шифрование): сгенерируйте их или очистите поле.
+- `key` можно задать как `"@path"`: ключ прочитается из файла.
+- Файл имеет наименьший приоритет: его перекрывают переменные окружения и флаги.
+
+Реальный файл может содержать DSN базы и ключи, поэтому `config.json`, `config.server.json` и `config.agent.json`
+исключены через `.gitignore`. В репозитории хранятся только `*.example.json`.
+
 ## Шифрование
 
 Агент шифрует тела запросов публичным RSA-ключом, сервер расшифровывает их приватным.

@@ -32,3 +32,5 @@ cmd/keygen/keygen
 
 # JSON-конфиг (-c / CONFIG): DSN базы, пути к ключам
 config.json
+config.server.json
+config.agent.json
