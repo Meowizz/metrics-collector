@@ -49,7 +49,7 @@ func main() {
 	var runErr error
 	defer func() {
 		if runErr != nil {
-			logger.Log.Fatal("Server stopped due to error")
+			logger.Log.Fatal("Server stopped due to error", zap.Error(runErr))
 		}
 	}()
 

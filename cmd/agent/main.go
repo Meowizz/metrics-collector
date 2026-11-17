@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net"
 	"os"
@@ -62,10 +63,9 @@ func main() {
 
 	wp := agent.NewWorkerPool(s, cfg.RateLimiter, logger.Log)
 
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	defer stop()
 
-	stop := make(chan struct{})
 	var wg sync.WaitGroup
 
 	wp.StartWorkingPool()
@@ -82,7 +82,7 @@ func main() {
 
 		for {
 			select {
-			case <-stop:
+			case <-ctx.Done():
 				return
 			case <-ticker.C:
 				c.Collect()
@@ -100,7 +100,7 @@ func main() {
 
 		for {
 			select {
-			case <-stop:
+			case <-ctx.Done():
 				reportMetrics(c, wp, cfg.BatchSize)
 				return
 			case <-ticker.C:
@@ -109,10 +109,9 @@ func main() {
 		}
 	}()
 
-	<-quit
+	<-ctx.Done()
+	stop()
 	logger.Log.Warn("Получен сигнал завершения. Корректная остановка агента..")
-
-	close(stop)
 
 	done := make(chan struct{})
 
