@@ -25,3 +25,12 @@ vendor/
 .vscode
 
 *.log
+
+# keygen
+cmd/keygen/keygen
+*.pem
+
+# JSON-конфиг (-c / CONFIG): DSN базы, пути к ключам
+config.json
+config.server.json
+config.agent.json

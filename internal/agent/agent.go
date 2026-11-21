@@ -112,7 +112,7 @@ func (wp *WorkerPool) StartWorkingPool() {
 				if len(batch) == 0 {
 					continue
 				}
-				err := wp.sender.Send(batch)
+				err := wp.sender.SendBatch(batch)
 				if err != nil {
 					wp.logger.Error("Ошибка отправки", zap.Int("worker", workerID), zap.Error(err))
 				}

@@ -3,6 +3,7 @@ package sender
 import (
 	"bytes"
 	"compress/gzip"
+	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/Meowizz/metrics-collector/internal/collector"
+	"github.com/Meowizz/metrics-collector/internal/crypto"
 	models "github.com/Meowizz/metrics-collector/internal/model"
 	"github.com/Meowizz/metrics-collector/pkg"
 )
@@ -264,7 +266,7 @@ func (s *Sender) SendBatch(metrics []*collector.Metric) error {
 	}
 
 	err := pkg.DoWithRetry(func() error {
-		req, reqErr := http.NewRequest(http.MethodPost, s.serverURL+"/updates", bytes.NewReader(jsonBytes))
+		req, reqErr := http.NewRequest(http.MethodPost, s.serverURL+"/updates/", bytes.NewReader(jsonBytes))
 		if reqErr != nil {
 			return reqErr
 		}
@@ -294,4 +296,55 @@ func (s *Sender) SendBatch(metrics []*collector.Metric) error {
 	jsonBufferPool.Put(buf)
 
 	return err
+}
+
+// EnableEncryption включает асимметричное шифрование тел запросов публичным ключом сервера.
+// Пересобирает транспорт клиента в цепочку GzipTransport → EncryptedTransport → http.DefaultTransport:
+// тело сначала сжимается, затем шифруется (зашифрованные данные не сжимаются).
+// Вызывать до начала отправки: метод меняет транспорт без синхронизации,
+// поэтому вызов во время работы воркеров приведёт к гонке данных.
+func (s *Sender) EnableEncryption(key *rsa.PublicKey) {
+	s.client.Transport = &GzipTransport{Transport: &EncryptedTransport{nextTransport: http.DefaultTransport, publicKey: key}}
+}
+
+// Проверка на этапе компиляции: EncryptedTransport реализует http.RoundTripper.
+var _ http.RoundTripper = (*EncryptedTransport)(nil)
+
+// EncryptedTransport — HTTP-транспорт, шифрующий тело запроса публичным ключом
+// по гибридной схеме crypto.Encrypt и помечающий запрос заголовком crypto.EncryptedHeader.
+// Запросы без тела (например, текстовый эндпоинт /update/{type}/{name}/{value})
+// передаются дальше без изменений.
+type EncryptedTransport struct {
+	nextTransport http.RoundTripper
+	publicKey     *rsa.PublicKey
+}
+
+// RoundTrip шифрует тело запроса и передаёт клон запроса следующему транспорту.
+// Исходный запрос не меняет, его тело закрывает. При ошибке шифрования запрос не отправляется.
+func (r *EncryptedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.Body == http.NoBody || req.Body == nil {
+		return r.nextTransport.RoundTrip(req)
+	}
+	defer req.Body.Close()
+	reqBody, err := io.ReadAll(req.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read request body: %w", err)
+	}
+
+	encryptedBody, err := crypto.Encrypt(r.publicKey, reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt request body: %w", err)
+	}
+
+	newReq := req.Clone(req.Context())
+	newReq.Body = io.NopCloser(bytes.NewReader(encryptedBody))
+	newReq.ContentLength = int64(len(encryptedBody))
+	newReq.Header.Set(crypto.EncryptedHeader, "rsa-oaep+aes-256-gcm")
+	newReq.Header.Set("Content-Length", strconv.Itoa(len(encryptedBody)))
+
+	newReq.GetBody = func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(encryptedBody)), nil
+	}
+
+	return r.nextTransport.RoundTrip(newReq)
 }
