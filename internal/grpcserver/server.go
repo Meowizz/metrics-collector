@@ -6,16 +6,13 @@ import (
 	"time"
 
 	"github.com/Meowizz/metrics-collector/internal/audit"
+	"github.com/Meowizz/metrics-collector/internal/middleware"
 	models "github.com/Meowizz/metrics-collector/internal/model"
 	pb "github.com/Meowizz/metrics-collector/internal/proto"
 	"github.com/Meowizz/metrics-collector/internal/repository"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
-
-type contextKey string
-
-const ipContextKey contextKey = "client-ip"
 
 type AuditSubject interface {
 	Notify(event audit.Event, ctx context.Context)
@@ -38,7 +35,7 @@ func NewMetricsServer(storage repository.Storage, auditSubject AuditSubject) *Me
 func (s *MetricsServer) UpdateMetrics(ctx context.Context, updReq *pb.UpdateMetricsRequest) (*pb.UpdateMetricsResponse, error) {
 	metrics := make([]models.Metrics, 0, len(updReq.GetMetrics()))
 	metricNames := make([]string, 0, len(updReq.GetMetrics()))
-	clientIP, _ := ctx.Value(ipContextKey).(string)
+	clientIP, _ := ctx.Value(middleware.ClientIPKey).(string)
 	if clientIP == "" {
 		clientIP = "unknown"
 	}

@@ -1,9 +1,34 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"net/netip"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
+
+
+type ContextKey string
+// ClientIPKey — ключ для сохранения IP клиента в контексте.
+const ClientIPKey ContextKey = "client-ip"
+
+// isIPTrustedInSubnet — крошечная общая функция проверки.
+// Возвращает true, если IP валиден и входит в подсеть.
+func isIPTrustedInSubnet(ipStr string, subnet netip.Prefix) bool {
+	if !subnet.IsValid() {
+		return true
+	}
+
+	addr, err := netip.ParseAddr(ipStr)
+	if err != nil {
+		return false
+	}
+	return subnet.Contains(addr.Unmap())
+}
 
 // CheckSubnetMiddleware — middleware для проверки, что IP-адрес из заголовка X-Real-IP
 // входит в доверенную подсеть. Отвечает 403, если заголовок отсутствует, не разбирается
@@ -30,5 +55,29 @@ func CheckSubnetMiddleware(subnet netip.Prefix) func(http.Handler) http.Handler 
 			next.ServeHTTP(w, r)
 		})
 
+	}
+}
+
+// GRPCAuthInterceptor — gRPC interceptor, который использует ТОЧНО ТУ ЖЕ проверку.
+func GRPCAuthInterceptor(subnet netip.Prefix) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		var ipStr string
+
+		if md, ok := metadata.FromIncomingContext(ctx); ok {
+			ips := md.Get("x-real-ip")
+			if len(ips) > 0 {
+				ipStr = ips[0]
+			}
+		}
+
+		if !isIPTrustedInSubnet(ipStr, subnet) {
+			return nil, status.Errorf(codes.PermissionDenied, "access denied for IP: %s", ipStr)
+		}
+
+		if ipStr != "" {
+			ctx = context.WithValue(ctx, ClientIPKey, ipStr)
+		}
+
+		return handler(ctx, req)
 	}
 }
