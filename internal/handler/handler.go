@@ -52,7 +52,7 @@ func getClientIP(rq *http.Request) string {
 	return ip
 }
 
-func (m *MetricsHandler) notifyAudit(rq *http.Request, metricNames []string, ctx context.Context) {
+func (m *MetricsHandler) notifyAudit(clientIP string, metricNames []string, ctx context.Context) {
 	if m.audit == nil {
 		return
 	}
@@ -60,7 +60,7 @@ func (m *MetricsHandler) notifyAudit(rq *http.Request, metricNames []string, ctx
 	event := audit.Event{
 		TS:      int64(time.Now().Unix()),
 		Metrics: metricNames,
-		IP:      getClientIP(rq),
+		IP:      clientIP,
 	}
 	m.audit.Notify(event, ctx)
 }
@@ -109,7 +109,8 @@ func (m *MetricsHandler) UpdatePage(res http.ResponseWriter, req *http.Request) 
 			return
 		}
 		m.storage.UpdateGauge(metricName, value)
-		m.notifyAudit(req, []string{metricName}, req.Context())
+		clientIP := getClientIP(req)
+		m.notifyAudit(clientIP, []string{metricName}, req.Context())
 
 	case "counter":
 		value, err := strconv.ParseInt(valueStr, 10, 64)
@@ -119,7 +120,8 @@ func (m *MetricsHandler) UpdatePage(res http.ResponseWriter, req *http.Request) 
 			return
 		}
 		m.storage.UpdateCounter(metricName, value)
-		m.notifyAudit(req, []string{metricName}, req.Context())
+		clientIP := getClientIP(req)
+		m.notifyAudit(clientIP, []string{metricName}, req.Context())
 
 	default:
 		http.Error(res, "Unknown metrics", http.StatusBadRequest)
@@ -194,7 +196,8 @@ func (m *MetricsHandler) UpdateMetricJSON(rw http.ResponseWriter, req *http.Requ
 			return
 		}
 		resp.Value = reqMetric.Value
-		m.notifyAudit(req, []string{reqMetric.ID}, req.Context())
+		clientIP := getClientIP(req)
+		m.notifyAudit(clientIP, []string{reqMetric.ID}, req.Context())
 	case models.Counter:
 		if reqMetric.Delta == nil {
 			http.Error(rw, "Value is required for counter", http.StatusUnprocessableEntity)
@@ -205,7 +208,8 @@ func (m *MetricsHandler) UpdateMetricJSON(rw http.ResponseWriter, req *http.Requ
 			return
 		}
 		resp.Delta = reqMetric.Delta
-		m.notifyAudit(req, []string{reqMetric.ID}, req.Context())
+		clientIP := getClientIP(req)
+		m.notifyAudit(clientIP, []string{reqMetric.ID}, req.Context())
 	default:
 		http.Error(rw, "Unsupported metric type", http.StatusUnprocessableEntity)
 		return
@@ -308,7 +312,9 @@ func (m *MetricsHandler) UpdatesHandler(rw http.ResponseWriter, rq *http.Request
 	for i, metric := range metric {
 		metricNames[i] = metric.ID
 	}
-	m.notifyAudit(rq, metricNames, rq.Context())
+
+	clientIP := getClientIP(rq)
+	m.notifyAudit(clientIP, metricNames, rq.Context())
 
 	rw.Header().Set("Content-Type", "application/json")
 	rw.WriteHeader(http.StatusOK)
