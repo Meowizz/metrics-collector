@@ -3,6 +3,7 @@ package grpcserver
 
 import (
 	"context"
+	"time"
 
 	"github.com/Meowizz/metrics-collector/internal/audit"
 	models "github.com/Meowizz/metrics-collector/internal/model"
@@ -16,27 +17,35 @@ type contextKey string
 
 const ipContextKey contextKey = "client-ip"
 
+type AuditSubject interface {
+	Notify(event audit.Event, ctx context.Context)
+}
+
 // MetricsServer реализует сервис Metrics из metrics.proto.
 type MetricsServer struct {
 	pb.UnimplementedMetricsServer
 	storage repository.Storage
+	audit   AuditSubject
 }
 
-func NewMetricsServer(storage repository.Storage) *MetricsServer {
+func NewMetricsServer(storage repository.Storage, auditSubject AuditSubject) *MetricsServer {
 	return &MetricsServer{
 		storage: storage,
+		audit:   auditSubject,
 	}
 }
 
 func (s *MetricsServer) UpdateMetrics(ctx context.Context, updReq *pb.UpdateMetricsRequest) (*pb.UpdateMetricsResponse, error) {
 	metrics := make([]models.Metrics, 0, len(updReq.GetMetrics()))
+	metricNames := make([]string, 0, len(updReq.GetMetrics()))
 	clientIP, _ := ctx.Value(ipContextKey).(string)
 	if clientIP == "" {
 		clientIP = "unknown"
 	}
 	for _, protoMetric := range updReq.GetMetrics() {
-		switch protoMetric.GetType() {
+		metricNames = append(metricNames, protoMetric.GetId())
 
+		switch protoMetric.GetType() {
 		case pb.Metric_GAUGE:
 			v := protoMetric.GetValue()
 			metrics = append(metrics, models.Metrics{
@@ -44,7 +53,6 @@ func (s *MetricsServer) UpdateMetrics(ctx context.Context, updReq *pb.UpdateMetr
 				MType: "gauge",
 				Value: &v,
 			})
-
 		case pb.Metric_COUNTER:
 			d := protoMetric.GetDelta()
 			metrics = append(metrics, models.Metrics{
@@ -54,14 +62,14 @@ func (s *MetricsServer) UpdateMetrics(ctx context.Context, updReq *pb.UpdateMetr
 			})
 
 		default:
-			return nil, status.Errorf(codes.InvalidArgument, "unknown metric type: %s", protoMetric.GetType())
+			return nil, status.Errorf(codes.InvalidArgument, "unknown metric type: %v", protoMetric.GetType())
 		}
 	}
 
 	err := s.storage.UpdateBatch(metrics)
 	if err != nil {
-		if s.audi != nil {
-			s.audit.Notify(audit.Event{TS: 0, Metrics: metricNames, IP: clientIP}, ctx)
+		if s.audit != nil {
+			s.audit.Notify(audit.Event{TS: time.Now().Unix(), Metrics: metricNames, IP: clientIP}, ctx)
 		}
 		return nil, status.Error(codes.Internal, "failed to update metrics")
 	}
