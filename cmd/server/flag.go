@@ -15,6 +15,7 @@ import (
 // ConfigAddr — конфигурация сервера. Приоритет: дефолты < файл < env < флаги.
 type ConfigAddr struct {
 	Addr            string `env:"ADDRESS"`
+	GRPCAddr        string `env:"GRPC_ADDRESS"`
 	LogLevel        string `env:"LOG_LEVEL"`
 	StoreInterval   int    `env:"STORE_INTERVAL"`
 	FileStoragePath string `env:"FILE_STORAGE_PATH"`
@@ -29,6 +30,7 @@ type ConfigAddr struct {
 
 type fileConfig struct {
 	Address       *string `json:"address"`
+	GRPCAddress   *string `json:"grpc_address"`
 	LogLevel      *string `json:"log_level"`
 	StoreInterval *string `json:"store_interval"`
 	StoreFile     *string `json:"store_file"`
@@ -60,13 +62,14 @@ func ParseFlag() *ConfigAddr {
 
 func parseConfig(name string, args []string, environ map[string]string) (*ConfigAddr, error) {
 	var (
-		flagAddr, flagLogLevel, flagFileStoragePath, flagDatabaseDSN, flagKey, flagAuditFile, flagAuditURL, flagCryptoKey, flagTrustedSubnet, flagConfig string
-		flagStoreInterval                                                                                                                                int
-		flagRestore                                                                                                                                      bool
+		flagAddr, flagGRPCAddr, flagLogLevel, flagFileStoragePath, flagDatabaseDSN, flagKey, flagAuditFile, flagAuditURL, flagCryptoKey, flagTrustedSubnet, flagConfig string
+		flagStoreInterval                                                                                                                                              int
+		flagRestore                                                                                                                                                    bool
 	)
 
 	fs := flag.NewFlagSet(name, flag.ExitOnError)
 	fs.StringVar(&flagAddr, "a", "", "Net address host:port")
+	fs.StringVar(&flagGRPCAddr, "g", "", "gRPC server address (host:port). If empty, gRPC is disabled")
 	fs.StringVar(&flagLogLevel, "l", "", "Log level")
 	fs.IntVar(&flagStoreInterval, "i", 0, "The -i flag and the STORE_INTERVAL environment variable are the time interval in seconds during which the server maintains a current connection to disk ")
 	fs.StringVar(&flagFileStoragePath, "f", "", "The -f flag and the FILE_STORAGE_PATH environment variable are the path to the file where the current value is stored.")
@@ -102,6 +105,9 @@ func parseConfig(name string, args []string, environ map[string]string) (*Config
 
 	if flagAddr != "" {
 		cfg.Addr = flagAddr
+	}
+	if flagGRPCAddr != "" {
+		cfg.GRPCAddr = flagGRPCAddr
 	}
 	if flagLogLevel != "" {
 		cfg.LogLevel = flagLogLevel
@@ -157,6 +163,9 @@ func applyFile(cfg *ConfigAddr, path string) error {
 
 	if fc.Address != nil {
 		cfg.Addr = *fc.Address
+	}
+	if fc.GRPCAddress != nil {
+		cfg.GRPCAddr = *fc.GRPCAddress
 	}
 	if fc.LogLevel != nil {
 		cfg.LogLevel = *fc.LogLevel
