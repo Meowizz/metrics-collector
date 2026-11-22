@@ -36,32 +36,40 @@ func main() {
 
 	c := collector.NewCollector()
 
-	address := "http://" + cfg.Addr
-	s := sender.NewSender(address, cfg.Key)
-
-	if cfg.CryptoKey != "" {
-		publicKey, err := crypto.LoadPublicKey(cfg.CryptoKey)
-		if err != nil {
-			log.Fatalf("failed to load public key: %v", err)
-		}
-		s.EnableEncryption(publicKey)
-	}
-
 	conn, err := net.Dial("udp", cfg.Addr)
 	if err != nil {
 		log.Fatalf("failed to determine agent IP: %v", err)
 	}
-
 	addr := conn.LocalAddr().(*net.UDPAddr).IP
+	conn.Close()
 
-	err = conn.Close()
-	if err != nil {
-		logger.Log.Warn("failed to close connection", zap.Error(err))
+	var metricSender sender.MectricSender
+
+	if cfg.GRPCAddr != ""{
+		grpcSender, err := sender.NewGRPCSender(cfg.GRPCAddr, addr.String())
+		if err != nil {
+			log.Fatalf("failed to initialize grpc sender: %v", err)
+		}
+		metricSender = grpcSender
+		logger.Log.Info("Using gRPC sender", zap.String("address", cfg.GRPCAddr))
+	} else {
+		address := "http://"+cfg.Addr
+		httpSender := sender.NewSender(address, cfg.Key)
+
+		if cfg.CryptoKey != ""{
+			publicKey, err := crypto.LoadPublicKey(cfg.CryptoKey)
+			if err != nil {
+				log.Fatalf("failed to load public key: %v", err)
+			}
+			httpSender.EnableEncryption(publicKey)
+		}
+		httpSender.SetRealIP(addr)
+		metricSender = httpSender
+		logger.Log.Info("Using http sender", zap.String("address", address))
 	}
+	defer metricSender.Close()
 
-	s.SetRealIP(addr)
-
-	wp := agent.NewWorkerPool(s, cfg.RateLimiter, logger.Log)
+	wp := agent.NewWorkerPool(metricSender, cfg.RateLimiter, logger.Log)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	defer stop()

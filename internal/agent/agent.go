@@ -12,7 +12,7 @@ import (
 // BatchSender — буферизатор метрик, отправляющий их батчами при достижении
 // максимального размера или по таймеру.
 type BatchSender struct {
-	sender       *sender.Sender
+	sender       sender.MectricSender
 	buffer       []*collector.Metric
 	logger       *zap.Logger
 	mu           sync.Mutex
@@ -23,7 +23,7 @@ type BatchSender struct {
 // NewBatchSender создаёт новый BatchSender с указанным отправителем,
 // максимальным размером батча и интервалом таймера для периодической отправки.
 // Возвращает указатель на инициализированный BatchSender. Запускает фоновый таймер.
-func NewBatchSender(s *sender.Sender, maxBatchSize int, interval time.Duration, logger *zap.Logger) *BatchSender {
+func NewBatchSender(s sender.MectricSender, maxBatchSize int, interval time.Duration, logger *zap.Logger) *BatchSender {
 	bs := &BatchSender{
 		sender:       s,
 		buffer:       make([]*collector.Metric, 0, maxBatchSize),
@@ -86,14 +86,14 @@ func (bs *BatchSender) Stop() {
 type WorkerPool struct {
 	ingestChan  chan []*collector.Metric
 	logger      *zap.Logger
-	sender      *sender.Sender
+	sender      sender.MectricSender
 	workerCount int
 	wg          sync.WaitGroup
 }
 
 // NewWorkerPool создаёт новый WorkerPool с указанным отправителем и количеством воркеров.
 // Возвращает указатель на инициализированный WorkerPool с буферизованным каналом (ёмкость 20).
-func NewWorkerPool(s *sender.Sender, workerCount int, logger *zap.Logger) *WorkerPool {
+func NewWorkerPool(s sender.MectricSender, workerCount int, logger *zap.Logger) *WorkerPool {
 	return &WorkerPool{
 		ingestChan:  make(chan []*collector.Metric, 20),
 		logger:      logger,

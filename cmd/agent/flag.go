@@ -14,6 +14,7 @@ import (
 // Config — конфигурация агента. Приоритет: дефолты < файл < флаги < env.
 type Config struct {
 	Addr           string
+	GRPCAddr       string
 	ReportInterval int
 	PollInterval   int
 	BatchSize      int
@@ -24,6 +25,7 @@ type Config struct {
 
 type fileConfig struct {
 	Address        *string `json:"address"`
+	GRPCAddress    *string `json:"grpc_address"`
 	ReportInterval *string `json:"report_interval"`
 	PollInterval   *string `json:"poll_interval"`
 	BatchSize      *int    `json:"batch_size"`
@@ -51,6 +53,7 @@ func parseConfig(name string, args []string, environ map[string]string) (*Config
 
 	fs := flag.NewFlagSet(name, flag.ExitOnError)
 	fs.StringVar(&cfg.Addr, "a", cfg.Addr, "Net address host:port")
+	fs.StringVar(&cfg.GRPCAddr, "g", "", "gRPC server address (host:port). If set, agent uses gRPC instead of HTTP")
 	fs.IntVar(&cfg.ReportInterval, "r", cfg.ReportInterval, "report interval in seconds")
 	fs.IntVar(&cfg.PollInterval, "p", cfg.PollInterval, "poll interval in seconds")
 	fs.IntVar(&cfg.BatchSize, "b", cfg.BatchSize, "batch size for sending metrics (0 = disabled)")
@@ -108,6 +111,9 @@ func applyFile(cfg *Config, path string) error {
 	if fc.Address != nil {
 		cfg.Addr = *fc.Address
 	}
+	if fc.GRPCAddress != nil {
+		cfg.GRPCAddr = *fc.GRPCAddress
+	}
 	if fc.ReportInterval != nil {
 		sec, err := config.Seconds(*fc.ReportInterval)
 		if err != nil {
@@ -140,6 +146,9 @@ func applyFile(cfg *Config, path string) error {
 func applyEnv(cfg *Config, environ map[string]string) error {
 	if v := environ["ADDRESS"]; v != "" {
 		cfg.Addr = v
+	}
+	if v := environ["GRPC_ADDRESS"]; v != "" {
+		cfg.GRPCAddr = v
 	}
 	for name, dst := range map[string]*int{
 		"REPORT_INTERVAL": &cfg.ReportInterval,
