@@ -1,5 +1,6 @@
 {
   "address": "localhost:8080",
+  "grpc_address": "",
   "log_level": "info",
   "store_interval": "300s",
   "store_file": "./home/storage.json",
@@ -8,5 +9,6 @@
   "key": "",
   "audit_file": "",
   "audit_url": "",
-  "crypto_key": "./private-key.pem"
+  "crypto_key": "./private-key.pem",
+  "trusted_subnet": ""
 }

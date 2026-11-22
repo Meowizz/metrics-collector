@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/rsa"
 	"errors"
+	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"net/netip"
 	"os"
@@ -15,14 +17,17 @@ import (
 
 	"github.com/Meowizz/metrics-collector/internal/audit"
 	"github.com/Meowizz/metrics-collector/internal/crypto"
+	"github.com/Meowizz/metrics-collector/internal/grpcserver"
 	"github.com/Meowizz/metrics-collector/internal/handler"
 	"github.com/Meowizz/metrics-collector/internal/logger"
 	appMiddleware "github.com/Meowizz/metrics-collector/internal/middleware"
+	pb "github.com/Meowizz/metrics-collector/internal/proto"
 	"github.com/Meowizz/metrics-collector/internal/repository"
 	"github.com/Meowizz/metrics-collector/pkg/build"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
 )
 
 var (
@@ -170,7 +175,7 @@ func main() {
 		Handler: r,
 	}
 
-	serverErr := make(chan error, 1)
+	serverErr := make(chan error, 2)
 
 	go func() {
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -178,6 +183,27 @@ func main() {
 		}
 	}()
 
+	var grpcServer *grpc.Server
+	if cfg.GRPCAddr != "" {
+		grpcServer = grpc.NewServer(
+			grpc.UnaryInterceptor(appMiddleware.GRPCAuthInterceptor(subnet)),
+		)
+
+		pb.RegisterMetricsServer(grpcServer, grpcserver.NewMetricsServer(storage, auditSubj))
+
+		go func() {
+			logger.Log.Info("Starting gRPC server", zap.String("address", cfg.GRPCAddr))
+			lis, err := net.Listen("tcp", cfg.GRPCAddr)
+			if err != nil {
+				serverErr <- fmt.Errorf("failed to listen for gRPC: %w", err)
+				return
+			}
+			if err := grpcServer.Serve(lis); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
+				serverErr <- fmt.Errorf("gRPC server error: %w", err)
+			}
+		}()
+
+	}
 	select {
 	case <-ctx.Done():
 		logger.Log.Info("Shutting down server")
@@ -191,6 +217,21 @@ func main() {
 	defer cancel()
 	if err := server.Shutdown(shutdownContext); err != nil {
 		logger.Log.Error("Server shutdown failed", zap.Error(err))
+	}
+
+	if grpcServer != nil {
+		done := make(chan struct{})
+		go func() {
+			grpcServer.GracefulStop()
+			close(done)
+		}()
+		select {
+		case <-done:
+			logger.Log.Info("Server gracefully stopped")
+		case <-time.After(5 * time.Second):
+			logger.Log.Warn("gRPC server GracefulStop timed out, forcing Stop()")
+			grpcServer.Stop()
+		}
 	}
 	auditSubj.Shutdown()
 	saverWG.Wait()
