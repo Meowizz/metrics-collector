@@ -11,4 +11,5 @@
   "audit_url": "",
   "crypto_key": "./private-key.pem",
   "trusted_subnet": ""
+  "crypto_key": "./private-key.pem"
 }
