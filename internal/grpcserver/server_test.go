@@ -1,4 +1,4 @@
-package grpcserver
+package grpcserver_test
 
 import (
 	"context"
@@ -17,27 +17,6 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
-)
-
-package grpcserver_test
-
-import (
-"context"
-"net"
-"net/netip"
-"testing"
-
-"github.com/Meowizz/metrics-collector/internal/audit"
-"github.com/Meowizz/metrics-collector/internal/grpcserver"
-appMiddleware "github.com/Meowizz/metrics-collector/internal/middleware"
-pb "github.com/Meowizz/metrics-collector/internal/proto"
-"github.com/Meowizz/metrics-collector/internal/repository"
-"google.golang.org/grpc"
-"google.golang.org/grpc/codes"
-"google.golang.org/grpc/credentials/insecure"
-"google.golang.org/grpc/metadata"
-"google.golang.org/grpc/status"
-"google.golang.org/grpc/test/bufconn"
 )
 
 const bufSize = 1024 * 1024
