@@ -43,7 +43,7 @@ func main() {
 	addr := conn.LocalAddr().(*net.UDPAddr).IP
 	conn.Close()
 
-	var metricSender sender.MectricSender
+	var metricSender sender.MetricSender
 
 	if cfg.GRPCAddr != ""{
 		grpcSender, err := sender.NewGRPCSender(cfg.GRPCAddr, addr.String())

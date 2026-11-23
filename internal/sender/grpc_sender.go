@@ -24,6 +24,7 @@ type GRPCSender struct {
 // NewGRPCSender создаёт новый gRPC-клиент для отправки метрик.
 // target — адрес gRPC-сервера (например, "localhost:50051").
 // ip — IP-адрес агента, который будет передаваться в метаданных x-real-ip.
+// Возвращает указатель на инициализированный GRPCSender с gRPC-клиентом.
 func NewGRPCSender(target string, ip string) (*GRPCSender, error) {
 	conn, err := grpc.NewClient(target, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
@@ -37,6 +38,7 @@ func NewGRPCSender(target string, ip string) (*GRPCSender, error) {
 }
 
 // Close закрывает gRPC-соединение.
+// Освобождает ресурсы, связанные с клиентским соединением.
 func (s *GRPCSender) Close() error {
 	if s.conn != nil {
 		s.conn.Close()
@@ -51,7 +53,7 @@ func (s *GRPCSender) SendBatch(metric []*collector.Metric) error {
 		return nil
 	}
 
-	pbMetrics := make([]*pb.Metric, len(metric))
+	pbMetrics := make([]*pb.Metric, 0, len(metric))
 	for _, m := range metric {
 		pm := &pb.Metric{}
 		pm.SetId(m.Name)
@@ -96,4 +98,4 @@ func (s *GRPCSender) SendBatch(metric []*collector.Metric) error {
 	})
 }
 
-var _ MectricSender = (*GRPCSender)(nil)
+var _ MetricSender = (*GRPCSender)(nil)

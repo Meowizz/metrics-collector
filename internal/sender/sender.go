@@ -381,13 +381,13 @@ func (r *IPTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 // MetricSender — интерфейс отправителя метрик.
 // Позволяет WorkerPool работать как с HTTP, так и с gRPC реализацией.
-type MectricSender interface {
+type MetricSender interface {
 	SendBatch(metrics []*collector.Metric) error
 	Close() error
 }
 
 // Проверка на этапе компиляции: *Sender реализует MetricSender
-var _ MectricSender = (*Sender)(nil)
+var _ MetricSender = (*Sender)(nil)
 
 // Close закрывает неиспользуемые соединения HTTP-клиента.
 // Это безопасный способ очистки ресурсов без прерывания активных запросов.
