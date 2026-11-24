@@ -36,7 +36,12 @@ func main() {
 
 	c := collector.NewCollector()
 
-	conn, err := net.Dial("udp", cfg.Addr)
+	serverAddr := cfg.Addr
+	if cfg.GRPCAddr != "" {
+		serverAddr = cfg.GRPCAddr
+	}
+
+	conn, err := net.Dial("udp", serverAddr)
 	if err != nil {
 		log.Fatalf("failed to determine agent IP: %v", err)
 	}

@@ -65,14 +65,11 @@ func (s *MetricsServer) UpdateMetrics(ctx context.Context, updReq *pb.UpdateMetr
 
 	err := s.storage.UpdateBatch(metrics)
 	if err != nil {
-		if s.audit != nil {
-			s.audit.Notify(audit.Event{TS: time.Now().Unix(), Metrics: metricNames, IP: clientIP}, ctx)
-		}
 		return nil, status.Error(codes.Internal, "failed to update metrics")
 	}
 
 	if s.audit != nil {
-		s.audit.Notify(audit.Event{TS: 0, Metrics: metricNames, IP: clientIP}, ctx)
+		s.audit.Notify(audit.Event{TS: time.Now().Unix(), Metrics: metricNames, IP: clientIP}, ctx)
 	}
 	return &pb.UpdateMetricsResponse{}, nil
 }
