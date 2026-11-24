@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"sync"
@@ -15,6 +16,7 @@ import (
 	"github.com/Meowizz/metrics-collector/internal/logger"
 	"github.com/Meowizz/metrics-collector/internal/sender"
 	"github.com/Meowizz/metrics-collector/pkg/build"
+	"go.uber.org/zap"
 )
 
 var (
@@ -34,18 +36,45 @@ func main() {
 
 	c := collector.NewCollector()
 
-	address := "http://" + cfg.Addr
-	s := sender.NewSender(address, cfg.Key)
-
-	if cfg.CryptoKey != "" {
-		publicKey, err := crypto.LoadPublicKey(cfg.CryptoKey)
-		if err != nil {
-			log.Fatalf("failed to load public key: %v", err)
-		}
-		s.EnableEncryption(publicKey)
+	serverAddr := cfg.Addr
+	if cfg.GRPCAddr != "" {
+		serverAddr = cfg.GRPCAddr
 	}
 
-	wp := agent.NewWorkerPool(s, cfg.RateLimiter, logger.Log)
+	conn, err := net.Dial("udp", serverAddr)
+	if err != nil {
+		log.Fatalf("failed to determine agent IP: %v", err)
+	}
+	addr := conn.LocalAddr().(*net.UDPAddr).IP
+	conn.Close()
+
+	var metricSender sender.MetricSender
+
+	if cfg.GRPCAddr != ""{
+		grpcSender, err := sender.NewGRPCSender(cfg.GRPCAddr, addr.String())
+		if err != nil {
+			log.Fatalf("failed to initialize grpc sender: %v", err)
+		}
+		metricSender = grpcSender
+		logger.Log.Info("Using gRPC sender", zap.String("address", cfg.GRPCAddr))
+	} else {
+		address := "http://"+cfg.Addr
+		httpSender := sender.NewSender(address, cfg.Key)
+
+		if cfg.CryptoKey != ""{
+			publicKey, err := crypto.LoadPublicKey(cfg.CryptoKey)
+			if err != nil {
+				log.Fatalf("failed to load public key: %v", err)
+			}
+			httpSender.EnableEncryption(publicKey)
+		}
+		httpSender.SetRealIP(addr)
+		metricSender = httpSender
+		logger.Log.Info("Using http sender", zap.String("address", address))
+	}
+	defer metricSender.Close()
+
+	wp := agent.NewWorkerPool(metricSender, cfg.RateLimiter, logger.Log)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	defer stop()

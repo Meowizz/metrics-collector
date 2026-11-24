@@ -15,6 +15,7 @@ import (
 // ConfigAddr — конфигурация сервера. Приоритет: дефолты < файл < env < флаги.
 type ConfigAddr struct {
 	Addr            string `env:"ADDRESS"`
+	GRPCAddr        string `env:"GRPC_ADDRESS"`
 	LogLevel        string `env:"LOG_LEVEL"`
 	StoreInterval   int    `env:"STORE_INTERVAL"`
 	FileStoragePath string `env:"FILE_STORAGE_PATH"`
@@ -24,10 +25,12 @@ type ConfigAddr struct {
 	AuditFile       string `env:"AUDIT_FILE"`
 	AuditURL        string `env:"AUDIT_URL"`
 	CryptoKey       string `env:"CRYPTO_KEY"`
+	TrustedSubnet   string `env:"TRUSTED_SUBNET"`
 }
 
 type fileConfig struct {
 	Address       *string `json:"address"`
+	GRPCAddress   *string `json:"grpc_address"`
 	LogLevel      *string `json:"log_level"`
 	StoreInterval *string `json:"store_interval"`
 	StoreFile     *string `json:"store_file"`
@@ -37,6 +40,7 @@ type fileConfig struct {
 	AuditFile     *string `json:"audit_file"`
 	AuditURL      *string `json:"audit_url"`
 	CryptoKey     *string `json:"crypto_key"`
+	TrustedSubnet *string `json:"trusted_subnet"`
 }
 
 func defaultConfig() *ConfigAddr {
@@ -58,13 +62,14 @@ func ParseFlag() *ConfigAddr {
 
 func parseConfig(name string, args []string, environ map[string]string) (*ConfigAddr, error) {
 	var (
-		flagAddr, flagLogLevel, flagFileStoragePath, flagDatabaseDSN, flagKey, flagAuditFile, flagAuditURL, flagCryptoKey, flagConfig string
-		flagStoreInterval                                                                                                             int
-		flagRestore                                                                                                                   bool
+		flagAddr, flagGRPCAddr, flagLogLevel, flagFileStoragePath, flagDatabaseDSN, flagKey, flagAuditFile, flagAuditURL, flagCryptoKey, flagTrustedSubnet, flagConfig string
+		flagStoreInterval                                                                                                                                              int
+		flagRestore                                                                                                                                                    bool
 	)
 
 	fs := flag.NewFlagSet(name, flag.ExitOnError)
 	fs.StringVar(&flagAddr, "a", "", "Net address host:port")
+	fs.StringVar(&flagGRPCAddr, "g", "", "gRPC server address (host:port). If empty, gRPC is disabled")
 	fs.StringVar(&flagLogLevel, "l", "", "Log level")
 	fs.IntVar(&flagStoreInterval, "i", 0, "The -i flag and the STORE_INTERVAL environment variable are the time interval in seconds during which the server maintains a current connection to disk ")
 	fs.StringVar(&flagFileStoragePath, "f", "", "The -f flag and the FILE_STORAGE_PATH environment variable are the path to the file where the current value is stored.")
@@ -74,6 +79,7 @@ func parseConfig(name string, args []string, environ map[string]string) (*Config
 	fs.StringVar(&flagAuditFile, "audit-file", "", "Audit name file")
 	fs.StringVar(&flagAuditURL, "audit-url", "", "URL for audit")
 	fs.StringVar(&flagCryptoKey, "crypto-key", "", "path to private key file (PEM)")
+	fs.StringVar(&flagTrustedSubnet, "t", "", "trusted subnet in CIDR notation")
 	fs.StringVar(&flagConfig, "c", "", "path to JSON config file")
 	fs.StringVar(&flagConfig, "config", "", "path to JSON config file (same as -c)")
 
@@ -99,6 +105,9 @@ func parseConfig(name string, args []string, environ map[string]string) (*Config
 
 	if flagAddr != "" {
 		cfg.Addr = flagAddr
+	}
+	if flagGRPCAddr != "" {
+		cfg.GRPCAddr = flagGRPCAddr
 	}
 	if flagLogLevel != "" {
 		cfg.LogLevel = flagLogLevel
@@ -129,6 +138,9 @@ func parseConfig(name string, args []string, environ map[string]string) (*Config
 	if flagAuditURL != "" {
 		cfg.AuditURL = flagAuditURL
 	}
+	if flagTrustedSubnet != "" {
+		cfg.TrustedSubnet = flagTrustedSubnet
+	}
 
 	cfg.Key = strings.TrimSpace(cfg.Key)
 	if strings.HasPrefix(cfg.Key, "@") {
@@ -151,6 +163,9 @@ func applyFile(cfg *ConfigAddr, path string) error {
 
 	if fc.Address != nil {
 		cfg.Addr = *fc.Address
+	}
+	if fc.GRPCAddress != nil {
+		cfg.GRPCAddr = *fc.GRPCAddress
 	}
 	if fc.LogLevel != nil {
 		cfg.LogLevel = *fc.LogLevel
@@ -182,6 +197,9 @@ func applyFile(cfg *ConfigAddr, path string) error {
 	}
 	if fc.CryptoKey != nil {
 		cfg.CryptoKey = *fc.CryptoKey
+	}
+	if fc.TrustedSubnet != nil {
+		cfg.TrustedSubnet = *fc.TrustedSubnet
 	}
 	return nil
 }
